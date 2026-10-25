@@ -81,11 +81,10 @@ export const VercelDeployModal: React.FC<VercelDeployModalProps> = ({ isOpen, on
           <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
           <div className="text-xs text-slate-300 space-y-1">
             <p className="font-semibold text-white">
-              ¡Tu proyecto ya incluye los archivos de configuración listos para Vercel!
+              ¡Error de dependencias (ERESOLVE esbuild) solucionado!
             </p>
             <p className="text-slate-400">
-              Hemos incluido <code className="text-purple-300 bg-purple-950/60 px-1.5 py-0.5 rounded">vercel.json</code> con
-              las reglas de rewrite SPA y la función serverless en <code className="text-purple-300 bg-purple-950/60 px-1.5 py-0.5 rounded">/api/full-audio/search.js</code> para que funcione en vivo sin configurar nada extra.
+              Hemos removido la versión conflictiva de esbuild, creado <code className="text-purple-300 bg-purple-950/60 px-1.5 py-0.5 rounded">.npmrc</code> con <code className="text-purple-300 bg-purple-950/60 px-1.5 py-0.5 rounded">legacy-peer-deps=true</code> y configurado <code className="text-purple-300 bg-purple-950/60 px-1.5 py-0.5 rounded">vercel.json</code> para que la instalación en Vercel sea 100% exitosa.
             </p>
           </div>
         </div>
@@ -97,13 +96,13 @@ export const VercelDeployModal: React.FC<VercelDeployModalProps> = ({ isOpen, on
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-white flex items-center gap-2">
                 <Github className="w-4 h-4 text-purple-400" />
-                1. Subir cambios a tu repositorio de GitHub
+                1. Subir la corrección a GitHub
               </span>
               <button
                 type="button"
                 onClick={() =>
                   copyToClipboard(
-                    'git add .\ngit commit -m "Deezer Library Hub - Lista para Vercel"\ngit push origin main',
+                    'git add .\ngit commit -m "Fix Vercel build: resolve esbuild peer dependency and add .npmrc"\ngit push origin main',
                     1
                   )
                 }
@@ -114,11 +113,11 @@ export const VercelDeployModal: React.FC<VercelDeployModalProps> = ({ isOpen, on
               </button>
             </div>
             <p className="text-xs text-slate-400">
-              Abre la terminal en tu computadora o en GitHub y ejecuta:
+              Abre la terminal en la carpeta de tu repositorio y ejecuta:
             </p>
             <pre className="p-3 rounded-xl bg-slate-950 text-emerald-400 font-mono text-xs overflow-x-auto border border-slate-800 leading-relaxed">
               git add .<br />
-              git commit -m "Deezer Library Hub - Lista para Vercel"<br />
+              git commit -m "Fix Vercel build: resolve esbuild peer dependency and add .npmrc"<br />
               git push origin main
             </pre>
           </div>
