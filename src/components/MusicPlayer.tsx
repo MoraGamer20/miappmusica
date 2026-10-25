@@ -1,0 +1,365 @@
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  Play,
+  Pause,
+  SkipBack,
+  SkipForward,
+  Shuffle,
+  Repeat,
+  Repeat1,
+  Volume2,
+  VolumeX,
+  Volume1,
+  Maximize2,
+  Download,
+  ListOrdered,
+  Heart,
+  Disc,
+  Music,
+} from 'lucide-react';
+import { Track } from '../types/music';
+import { AudioVisualizer } from './AudioVisualizer';
+import { downloadTrackAudio } from '../utils/downloadHelper';
+
+interface MusicPlayerProps {
+  currentTrack: Track | null;
+  isPlaying: boolean;
+  onTogglePlay: () => void;
+  onNextTrack: () => void;
+  onPreviousTrack: () => void;
+  isShuffle: boolean;
+  onToggleShuffle: () => void;
+  repeatMode: 'off' | 'all' | 'one';
+  onCycleRepeat: () => void;
+  currentTime: number;
+  duration: number;
+  onSeek: (time: number) => void;
+  volume: number;
+  onVolumeChange: (vol: number) => void;
+  isMuted: boolean;
+  onToggleMute: () => void;
+  onToggleFavorite: (id: string) => void;
+  onOpenQueue: () => void;
+  onOpenFullPlayer: () => void;
+  queueLength: number;
+  playbackSource: 'full' | 'preview';
+  onTogglePlaybackSource: () => void;
+  onOpenDownloadModal: (track: Track) => void;
+}
+
+export const MusicPlayer: React.FC<MusicPlayerProps> = ({
+  currentTrack,
+  isPlaying,
+  onTogglePlay,
+  onNextTrack,
+  onPreviousTrack,
+  isShuffle,
+  onToggleShuffle,
+  repeatMode,
+  onCycleRepeat,
+  currentTime,
+  duration,
+  onSeek,
+  volume,
+  onVolumeChange,
+  isMuted,
+  onToggleMute,
+  onToggleFavorite,
+  onOpenQueue,
+  onOpenFullPlayer,
+  queueLength,
+  playbackSource,
+  onTogglePlaybackSource,
+  onOpenDownloadModal,
+}) => {
+  const [isDownloading, setIsDownloading] = useState(false);
+  const progressBarRef = useRef<HTMLDivElement | null>(null);
+
+  const formatTime = (secs: number) => {
+    if (isNaN(secs) || secs < 0) return '0:00';
+    const m = Math.floor(secs / 60);
+    const s = Math.floor(secs % 60);
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
+
+  const handleProgressBarClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!progressBarRef.current || duration <= 0) return;
+    const rect = progressBarRef.current.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const percentage = Math.max(0, Math.min(1, clickX / rect.width));
+    onSeek(percentage * duration);
+  };
+
+  const handleDownload = () => {
+    if (!currentTrack) return;
+    onOpenDownloadModal(currentTrack);
+  };
+
+  if (!currentTrack) {
+    return (
+      <footer className="fixed bottom-0 left-0 right-0 h-20 bg-slate-900/95 border-t border-slate-800 text-slate-500 flex items-center justify-between px-6 z-30 backdrop-blur-lg">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-slate-800 flex items-center justify-center">
+            <Music className="w-5 h-5 text-slate-600" />
+          </div>
+          <div>
+            <p className="text-xs font-medium text-slate-400">Selecciona una canción para reproducir</p>
+            <p className="text-[10px] text-slate-600">Buscador y reproductor listos</p>
+          </div>
+        </div>
+      </footer>
+    );
+  }
+
+  const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
+
+  return (
+    <footer className="fixed bottom-0 left-0 right-0 h-22 bg-slate-900/95 border-t border-slate-800 text-white flex flex-col justify-between px-4 sm:px-6 py-2.5 z-30 backdrop-blur-xl shadow-2xl">
+      {/* Top Timeline Slider */}
+      <div
+        ref={progressBarRef}
+        onClick={handleProgressBarClick}
+        className="w-full h-2.5 -mt-3.5 pt-1.5 cursor-pointer group flex items-center"
+      >
+        <div className="w-full h-1 bg-slate-800 group-hover:h-2 rounded-full overflow-hidden transition-all relative">
+          <div
+            className="h-full bg-gradient-to-r from-purple-500 to-indigo-500 relative transition-all duration-100"
+            style={{ width: `${progressPercent}%` }}
+          >
+            <div className="absolute right-0 top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-white rounded-full shadow opacity-0 group-hover:opacity-100 transition-opacity" />
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-4">
+        {/* Left: Track Information & Album Art */}
+        <div className="flex items-center gap-3 min-w-0 max-w-[28%]">
+          <div
+            onClick={onOpenFullPlayer}
+            className="relative w-12 h-12 rounded-xl overflow-hidden shrink-0 cursor-pointer shadow-md group/art bg-slate-800"
+            title="Expandir reproductor"
+          >
+            {currentTrack.coverUrl ? (
+              <img
+                src={currentTrack.coverUrl}
+                alt={currentTrack.album}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-white">
+                <Disc className={`w-6 h-6 ${isPlaying ? 'animate-spin' : ''}`} />
+              </div>
+            )}
+            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/art:opacity-100 flex items-center justify-center transition-opacity">
+              <Maximize2 className="w-4 h-4 text-white" />
+            </div>
+          </div>
+
+          <div className="min-w-0">
+            <h4
+              onClick={onOpenFullPlayer}
+              className="text-xs sm:text-sm font-semibold truncate hover:text-purple-400 cursor-pointer transition-colors"
+              title={currentTrack.title}
+            >
+              {currentTrack.title}
+            </h4>
+            <p className="text-[11px] text-slate-400 truncate" title={currentTrack.artist}>
+              {currentTrack.artist}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => onToggleFavorite(currentTrack.id)}
+            aria-label={currentTrack.isFavorite ? 'Quitar de favoritos' : 'Añadir a favoritos'}
+            className="p-1 text-slate-400 hover:text-rose-500 transition-colors hidden sm:block"
+          >
+            <Heart
+              className={`w-4 h-4 ${currentTrack.isFavorite ? 'text-rose-500 fill-rose-500' : ''}`}
+            />
+          </button>
+        </div>
+
+        {/* Center: Controls & Audio Wave */}
+        <div className="flex flex-col items-center gap-1.5 max-w-md w-full">
+          <div className="flex items-center gap-3 sm:gap-5">
+            {/* Shuffle */}
+            <button
+              type="button"
+              onClick={onToggleShuffle}
+              aria-label="Aleatorio"
+              className={`p-1.5 rounded-md transition-colors ${
+                isShuffle ? 'text-purple-400' : 'text-slate-400 hover:text-slate-200'
+              }`}
+              title={isShuffle ? 'Aleatorio activado' : 'Aleatorio desactivado'}
+            >
+              <Shuffle className="w-4 h-4" />
+            </button>
+
+            {/* Skip Back */}
+            <button
+              type="button"
+              onClick={onPreviousTrack}
+              aria-label="Canción anterior"
+              className="p-1.5 text-slate-300 hover:text-white transition-colors"
+            >
+              <SkipBack className="w-4 h-4 fill-current" />
+            </button>
+
+            {/* Play/Pause Button */}
+            <button
+              type="button"
+              onClick={onTogglePlay}
+              aria-label={isPlaying ? 'Pausar' : 'Reproducir'}
+              className="w-10 h-10 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-500 hover:from-purple-500 hover:to-indigo-400 text-white flex items-center justify-center shadow-lg shadow-purple-600/30 transition-transform active:scale-95"
+            >
+              {isPlaying ? (
+                <Pause className="w-5 h-5 fill-current" />
+              ) : (
+                <Play className="w-5 h-5 fill-current ml-0.5" />
+              )}
+            </button>
+
+            {/* Skip Next */}
+            <button
+              type="button"
+              onClick={onNextTrack}
+              aria-label="Canción siguiente"
+              className="p-1.5 text-slate-300 hover:text-white transition-colors"
+            >
+              <SkipForward className="w-4 h-4 fill-current" />
+            </button>
+
+            {/* Repeat */}
+            <button
+              type="button"
+              onClick={onCycleRepeat}
+              aria-label="Repetir"
+              className={`p-1.5 rounded-md transition-colors ${
+                repeatMode !== 'off' ? 'text-purple-400' : 'text-slate-400 hover:text-slate-200'
+              }`}
+              title={
+                repeatMode === 'one'
+                  ? 'Repetir una pista'
+                  : repeatMode === 'all'
+                  ? 'Repetir lista completa'
+                  : 'Repetición desactivada'
+              }
+            >
+              {repeatMode === 'one' ? (
+                <Repeat1 className="w-4 h-4" />
+              ) : (
+                <Repeat className="w-4 h-4" />
+              )}
+            </button>
+          </div>
+
+          {/* Time indicator, Mode Toggle and Visualizer */}
+          <div className="flex items-center gap-2.5 text-[11px] text-slate-400 font-mono">
+            <span>{formatTime(currentTime)}</span>
+            <div className="hidden sm:block">
+              <AudioVisualizer isPlaying={isPlaying} barCount={16} height={15} color="#a855f7" />
+            </div>
+            <span>{formatTime(duration)}</span>
+
+            {/* Full Audio vs 30s Preview Mode Toggle */}
+            <div className="flex items-center bg-slate-800 p-0.5 rounded-lg border border-slate-700/80 text-[10px] ml-1">
+              <button
+                type="button"
+                onClick={() => playbackSource !== 'full' && onTogglePlaybackSource()}
+                className={`px-2 py-0.5 rounded-md font-semibold transition-colors ${
+                  playbackSource === 'full'
+                    ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+                title="Modo Canción Completa (reproduce la canción completa de 3-5 minutos)"
+              >
+                🎵 Completa
+              </button>
+              <button
+                type="button"
+                onClick={() => playbackSource !== 'preview' && onTogglePlaybackSource()}
+                className={`px-2 py-0.5 rounded-md font-medium transition-colors ${
+                  playbackSource === 'preview'
+                    ? 'bg-purple-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+                title="Vista previa rápida de Deezer (30 segundos)"
+              >
+                ⏱️ 30s
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Right: Actions, Volume & Tools */}
+        <div className="flex items-center justify-end gap-2 sm:gap-3 min-w-0 max-w-[28%]">
+          {/* Direct Download MP3 */}
+          <button
+            type="button"
+            onClick={handleDownload}
+            disabled={isDownloading}
+            aria-label="Descargar canción actual en MP3"
+            className="p-2 text-slate-300 hover:text-emerald-400 hover:bg-slate-800 rounded-lg transition-colors"
+            title="Descargar archivo MP3 de esta canción"
+          >
+            <Download className={`w-4 h-4 ${isDownloading ? 'animate-bounce text-emerald-400' : ''}`} />
+          </button>
+
+          {/* Queue Drawer toggle */}
+          <button
+            type="button"
+            onClick={onOpenQueue}
+            aria-label={`Ver cola (${queueLength})`}
+            className="p-2 text-slate-300 hover:text-purple-400 hover:bg-slate-800 rounded-lg transition-colors relative"
+            title="Cola de reproducción"
+          >
+            <ListOrdered className="w-4 h-4" />
+            {queueLength > 0 && (
+              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-purple-500" />
+            )}
+          </button>
+
+          {/* Volume Control */}
+          <div className="hidden md:flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={onToggleMute}
+              aria-label={isMuted ? 'Desactivar silencio' : 'Silenciar'}
+              className="p-1.5 text-slate-400 hover:text-white transition-colors"
+            >
+              {isMuted || volume === 0 ? (
+                <VolumeX className="w-4 h-4 text-rose-400" />
+              ) : volume < 0.5 ? (
+                <Volume1 className="w-4 h-4" />
+              ) : (
+                <Volume2 className="w-4 h-4" />
+              )}
+            </button>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              value={isMuted ? 0 : volume}
+              onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
+              aria-label="Volumen"
+              className="w-18 accent-purple-500 h-1 bg-slate-700 rounded-lg cursor-pointer"
+            />
+          </div>
+
+          {/* Expand to Full Player Modal */}
+          <button
+            type="button"
+            onClick={onOpenFullPlayer}
+            aria-label="Pantalla completa del reproductor"
+            className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+            title="Modo pantalla completa / visualizador"
+          >
+            <Maximize2 className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    </footer>
+  );
+};

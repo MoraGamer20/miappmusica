@@ -1,0 +1,6 @@
+{
+  "name": "Deezer Library Hub - Gestor y Reproductor",
+  "description": "Gestiona, busca, reproduce y descarga tu catálogo de canciones de Deezer con reproductor interactivo y visor de biblioteca.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
