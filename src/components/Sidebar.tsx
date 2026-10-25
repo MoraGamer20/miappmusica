@@ -11,6 +11,9 @@ import {
   Layers,
   ChevronRight,
   Disc,
+  Search,
+  Globe,
+  Plus,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -23,6 +26,8 @@ interface SidebarProps {
   selectedArtist: string | null;
   onSelectArtist: (artist: string | null) => void;
   totalTracks: number;
+  onOpenAddModal?: () => void;
+  onOpenVercelGuide?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -35,6 +40,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   selectedArtist,
   onSelectArtist,
   totalTracks,
+  onOpenAddModal,
+  onOpenVercelGuide,
 }) => {
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
@@ -52,6 +59,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <aside className="hidden md:flex w-64 bg-slate-900 border-r border-slate-800 text-slate-300 flex-col shrink-0 h-[calc(100vh-4rem-5.5rem)] sticky top-16 overflow-y-auto">
       {/* Playlists Section */}
       <div className="p-4 space-y-4">
+        {/* Explore / Download Songs Online */}
+        {onOpenAddModal && (
+          <button
+            type="button"
+            onClick={onOpenAddModal}
+            className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-purple-900/40 via-indigo-900/40 to-slate-800 border border-purple-500/30 text-purple-200 hover:text-white hover:border-purple-500/60 transition-all shadow-sm group text-left"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-purple-600/30 text-purple-300 flex items-center justify-center group-hover:scale-105 transition-transform">
+                <Search className="w-3.5 h-3.5" />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-white">Explorar Música Web</p>
+                <p className="text-[10px] text-purple-300/80">Buscar & Descargar</p>
+              </div>
+            </div>
+            <Plus className="w-3.5 h-3.5 text-purple-400 group-hover:rotate-90 transition-transform" />
+          </button>
+        )}
+
         <div>
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
@@ -215,6 +242,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
             })}
           </div>
         </div>
+
+        {/* Deploy on Vercel Guide */}
+        {onOpenVercelGuide && (
+          <div className="pt-3 border-t border-slate-800">
+            <button
+              type="button"
+              onClick={onOpenVercelGuide}
+              className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs bg-slate-800/40 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <Globe className="w-3.5 h-3.5 text-blue-400" />
+                <span>Desplegar en Vercel</span>
+              </div>
+              <ChevronRight className="w-3.5 h-3.5 text-slate-500" />
+            </button>
+          </div>
+        )}
       </div>
     </aside>
   );

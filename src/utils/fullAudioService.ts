@@ -42,7 +42,9 @@ export async function getFullTrackVideoId(track: Track): Promise<string | null> 
 
   try {
     const query = encodeURIComponent(`${track.artist} ${track.title} audio official`);
-    const res = await fetch(`/api/full-audio/search?q=${query}`);
+    const res = await fetch(`/api/full-audio/search?q=${query}`, {
+      signal: AbortSignal.timeout(3500),
+    });
     if (res.ok) {
       const data = await res.json();
       if (data.videoId) {
@@ -52,7 +54,34 @@ export async function getFullTrackVideoId(track: Track): Promise<string | null> 
       }
     }
   } catch (err) {
-    console.error('Error fetching full track videoId', err);
+    // Proceed to fallback
+  }
+
+  // Fallback: Query public Invidious instance (CORS friendly)
+  const invidiousInstances = [
+    'https://inv.nadeko.net',
+    'https://invidious.nerdvpn.de',
+    'https://vid.puffyan.us',
+  ];
+
+  for (const instance of invidiousInstances) {
+    try {
+      const query = encodeURIComponent(`${track.artist} ${track.title}`);
+      const invRes = await fetch(`${instance}/api/v1/search?q=${query}&type=video`, {
+        signal: AbortSignal.timeout(3000),
+      });
+      if (invRes.ok) {
+        const invData = await invRes.json();
+        if (Array.isArray(invData) && invData.length > 0 && invData[0].videoId) {
+          const vid = invData[0].videoId;
+          videoIdCache.set(cacheKey, vid);
+          persistVideoIdCache();
+          return vid;
+        }
+      }
+    } catch {
+      // Try next instance
+    }
   }
 
   return null;

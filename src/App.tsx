@@ -23,6 +23,7 @@ import { EditTrackModal } from './components/EditTrackModal';
 import { YouTubeAudioEmbed } from './components/YouTubeAudioEmbed';
 import { FullTrackDownloadModal } from './components/FullTrackDownloadModal';
 import { BulkLibraryDownloadModal } from './components/BulkLibraryDownloadModal';
+import { VercelDeployModal } from './components/VercelDeployModal';
 
 const STORAGE_KEY = 'deezer_library_tracks_v2';
 const CUSTOM_PLAYLISTS_KEY = 'deezer_custom_playlists_v2';
@@ -53,12 +54,14 @@ export default function App() {
 
   // Modals state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [searchModalInitialQuery, setSearchModalInitialQuery] = useState('');
   const [isStatsModalOpen, setIsStatsModalOpen] = useState(false);
   const [isFullPlayerOpen, setIsFullPlayerOpen] = useState(false);
   const [isQueueOpen, setIsQueueOpen] = useState(false);
   const [editingTrack, setEditingTrack] = useState<Track | null>(null);
   const [downloadModalTrack, setDownloadModalTrack] = useState<Track | null>(null);
   const [isBulkDownloadOpen, setIsBulkDownloadOpen] = useState(false);
+  const [isVercelModalOpen, setIsVercelModalOpen] = useState(false);
 
   // Batch download state
   const [batchDownloadState, setBatchDownloadState] = useState<{
@@ -482,6 +485,16 @@ export default function App() {
     updateTracks(next);
   };
 
+  const handleBatchAddTracks = (trackDataList: Omit<Track, 'id'>[]) => {
+    const newTracks: Track[] = trackDataList.map((td, idx) => ({
+      ...td,
+      id: `track-custom-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 7)}`,
+      addedAt: Date.now(),
+    }));
+    const next = [...newTracks, ...tracks];
+    updateTracks(next);
+  };
+
   // Batch Operations
   const handleBatchDownloadZip = (selected: Track[]) => {
     setBatchDownloadState({
@@ -672,7 +685,10 @@ export default function App() {
         totalTracks={tracks.length}
         filteredCount={filteredTracks.length}
         uniqueArtistsCount={stats.uniqueArtists}
-        onOpenAddModal={() => setIsAddModalOpen(true)}
+        onOpenAddModal={() => {
+          setSearchModalInitialQuery('');
+          setIsAddModalOpen(true);
+        }}
         onOpenStatsModal={() => setIsStatsModalOpen(true)}
         onOpenDuplicatesModal={handleDeduplicate}
         duplicateCount={stats.duplicateCount}
@@ -682,6 +698,7 @@ export default function App() {
         onImportCSVFile={handleImportCSVFile}
         activePlaylist={activePlaylist}
         onOpenBulkDownloadModal={() => setIsBulkDownloadOpen(true)}
+        onOpenVercelGuide={() => setIsVercelModalOpen(true)}
       />
 
       {/* Main Layout: Sidebar + Track Table */}
@@ -731,6 +748,11 @@ export default function App() {
           selectedArtist={selectedArtist}
           onSelectArtist={setSelectedArtist}
           totalTracks={tracks.length}
+          onOpenAddModal={() => {
+            setSearchModalInitialQuery('');
+            setIsAddModalOpen(true);
+          }}
+          onOpenVercelGuide={() => setIsVercelModalOpen(true)}
         />
 
         <TrackTable
@@ -751,6 +773,10 @@ export default function App() {
           availablePlaylists={availablePlaylistNames}
           searchQuery={searchQuery}
           onOpenDownloadModal={(track) => setDownloadModalTrack(track)}
+          onOpenSearchModal={(query) => {
+            setSearchModalInitialQuery(query || '');
+            setIsAddModalOpen(true);
+          }}
         />
       </div>
 
@@ -855,12 +881,23 @@ export default function App() {
         availablePlaylists={availablePlaylistNames}
       />
 
-      {/* Add Track Modal */}
+      {/* Add Track & Web Music Searcher/Downloader Modal */}
       <AddTrackModal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         onAddTrack={handleAddTrack}
+        onBatchAddTracks={handleBatchAddTracks}
         availablePlaylists={availablePlaylistNames}
+        onCreatePlaylist={handleCreatePlaylist}
+        onOpenDownloadModal={(track) => setDownloadModalTrack(track)}
+        initialQuery={searchModalInitialQuery}
+        onOpenVercelGuide={() => setIsVercelModalOpen(true)}
+      />
+
+      {/* Vercel & GitHub Deployment Guide Modal */}
+      <VercelDeployModal
+        isOpen={isVercelModalOpen}
+        onClose={() => setIsVercelModalOpen(false)}
       />
 
       {/* Edit Track Modal */}

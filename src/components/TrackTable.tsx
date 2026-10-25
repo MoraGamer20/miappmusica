@@ -21,6 +21,7 @@ import {
   FileArchive,
   ListMusic,
   Share2,
+  Search,
 } from 'lucide-react';
 import { Track, SortField, SortOrder } from '../types/music';
 import { downloadTrackAudio, getStreamingLinks } from '../utils/downloadHelper';
@@ -43,6 +44,7 @@ interface TrackTableProps {
   availablePlaylists: string[];
   searchQuery: string;
   onOpenDownloadModal: (track: Track) => void;
+  onOpenSearchModal?: (query?: string) => void;
 }
 
 export const TrackTable: React.FC<TrackTableProps> = ({
@@ -63,6 +65,7 @@ export const TrackTable: React.FC<TrackTableProps> = ({
   availablePlaylists,
   searchQuery,
   onOpenDownloadModal,
+  onOpenSearchModal,
 }) => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
@@ -361,9 +364,20 @@ export const TrackTable: React.FC<TrackTableProps> = ({
           <h3 className="text-base font-semibold text-slate-200 mb-1">No se encontraron canciones</h3>
           <p className="text-xs text-slate-400 max-w-sm mb-4">
             {searchQuery
-              ? `No hay coincidencias para "${searchQuery}". Intenta con otro término o limpia el buscador.`
+              ? `No hay coincidencias para "${searchQuery}" en tu biblioteca local.`
               : 'Tu biblioteca está vacía o no hay canciones en este filtro.'}
           </p>
+
+          {searchQuery && onOpenSearchModal && (
+            <button
+              type="button"
+              onClick={() => onOpenSearchModal(searchQuery)}
+              className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold text-xs rounded-xl shadow-lg shadow-purple-600/30 flex items-center gap-2 transition-all active:scale-95"
+            >
+              <Search className="w-3.5 h-3.5" />
+              <span>Buscar "{searchQuery}" en la Web para Escuchar, Descargar y Añadir</span>
+            </button>
+          )}
         </div>
       )}
 
