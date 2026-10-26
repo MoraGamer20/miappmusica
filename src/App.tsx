@@ -34,7 +34,7 @@ import { MobileArtistsView } from './components/MobileArtistsView';
 import { MobileToolsView } from './components/MobileToolsView';
 import { equalizer } from './utils/equalizerService';
 import defaultCsvRaw from '../public/assets/aistudio/My_Deezer_Library_e6092c00.csv?raw';
-import { Heart, Play } from 'lucide-react';
+import { Heart, Play, Shuffle, Sliders, Download, Sparkles, ListMusic, Users, Clock, RotateCcw, X, Music } from 'lucide-react';
 
 const STORAGE_KEY = 'deezer_library_tracks_v4_authentic';
 const CUSTOM_PLAYLISTS_KEY = 'deezer_custom_playlists_v2';
@@ -288,8 +288,15 @@ export default function App() {
       // Preview mode (30s) or fallback
       setActiveVideoId(null);
       if (!audioRef.current) {
-        audioRef.current = new Audio();
+        const newAud = new Audio();
+        newAud.crossOrigin = 'anonymous';
+        audioRef.current = newAud;
+        equalizer.attachAudioElement(newAud);
+      } else if (!audioRef.current.crossOrigin) {
+        audioRef.current.crossOrigin = 'anonymous';
       }
+
+      equalizer.resume();
 
       const audio = audioRef.current;
       audio.volume = isMuted ? 0 : volume;
@@ -463,6 +470,9 @@ export default function App() {
   // Setup Audio element listeners & Equalizer integration
   useEffect(() => {
     const audio = audioRef.current || new Audio();
+    if (!audio.crossOrigin) {
+      audio.crossOrigin = 'anonymous';
+    }
     audioRef.current = audio;
     equalizer.attachAudioElement(audio);
 
@@ -1022,37 +1032,123 @@ export default function App() {
         <div className="md:hidden flex-1 min-w-0 w-full">
           {mobileTab === 'tracks' && (
             <div className="flex flex-col w-full">
-              {/* Active Playlist/Artist Header Bar on Mobile */}
-              <div className="px-3.5 py-2.5 bg-slate-900/95 border-b border-slate-800/90 flex items-center justify-between gap-2 sticky top-14 z-20 backdrop-blur-md">
-                <div className="min-w-0 flex items-center gap-1.5 flex-1">
-                  <span className="text-[11px] font-semibold text-slate-400 shrink-0">Lista:</span>
-                  <span className="text-xs font-bold text-white truncate bg-slate-800 px-2 py-0.5 rounded-lg border border-slate-700/80">
-                    {selectedArtist
-                      ? `Artista: ${selectedArtist}`
-                      : activePlaylist === 'ALL'
-                      ? 'Todas las Canciones'
-                      : activePlaylist}
-                  </span>
-                  {(selectedArtist || activePlaylist !== 'ALL') && (
+              {/* Sleek Mobile Hero Section (First Impression) */}
+              <div className="px-4 pt-3.5 pb-3 bg-gradient-to-b from-slate-900 via-slate-900/90 to-slate-950 border-b border-slate-800/80">
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <div>
+                    <h2 className="text-base font-bold text-white flex items-center gap-2">
+                      <span>Mi Biblioteca Deezer</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 font-semibold">
+                        {tracks.length.toLocaleString()} canciones
+                      </span>
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      {favoriteTracks.length} favoritas • {stats.uniqueArtists} artistas • Alta fidelidad
+                    </p>
+                  </div>
+
+                  {/* Shuffle Play Hero Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (filteredTracks.length > 0) {
+                        const randomIdx = Math.floor(Math.random() * filteredTracks.length);
+                        playTrackDirect(filteredTracks[randomIdx], filteredTracks);
+                      }
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-semibold text-xs active:scale-95 transition-all shadow-md shadow-purple-600/30 shrink-0"
+                    title="Reproducir en modo aleatorio"
+                  >
+                    <Shuffle className="w-3.5 h-3.5" />
+                    <span>Aleatorio</span>
+                  </button>
+                </div>
+
+                {/* Quick Filter Horizontal Scroll Pills */}
+                <div className="flex items-center gap-2 overflow-x-auto scrollbar-none pb-1 -mx-1 px-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActivePlaylist('ALL');
+                      setSelectedArtist(null);
+                    }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all shrink-0 border ${
+                      activePlaylist === 'ALL' && !selectedArtist
+                        ? 'bg-purple-600 text-white border-purple-500 shadow-sm'
+                        : 'bg-slate-800/90 text-slate-300 border-slate-700/80 hover:bg-slate-800'
+                    }`}
+                  >
+                    ✨ Todas ({tracks.length.toLocaleString()})
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setMobileTab('favorites')}
+                    className="px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all shrink-0 border bg-slate-800/90 text-rose-300 border-rose-500/30 hover:bg-slate-800 flex items-center gap-1"
+                  >
+                    <Heart className="w-3.5 h-3.5 fill-rose-500 text-rose-500" />
+                    <span>Favoritas ({favoriteTracks.length})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setMobileTab('playlists')}
+                    className="px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all shrink-0 border bg-slate-800/90 text-purple-300 border-purple-500/30 hover:bg-slate-800 flex items-center gap-1"
+                  >
+                    <ListMusic className="w-3.5 h-3.5 text-purple-400" />
+                    <span>Playlists ({playlistsList.length})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setMobileTab('artists')}
+                    className="px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all shrink-0 border bg-slate-800/90 text-slate-300 border-slate-700/80 hover:bg-slate-800 flex items-center gap-1"
+                  >
+                    <Users className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Artistas ({stats.uniqueArtists})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsEqualizerOpen(true)}
+                    className="px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all shrink-0 border bg-slate-800/90 text-indigo-300 border-indigo-500/30 hover:bg-slate-800 flex items-center gap-1"
+                  >
+                    <Sliders className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Ecualizador</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsBulkDownloadOpen(true)}
+                    className="px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all shrink-0 border bg-emerald-950/40 text-emerald-300 border-emerald-500/40 hover:bg-emerald-900/50 flex items-center gap-1"
+                  >
+                    <Download className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Descargar BD MP3</span>
+                  </button>
+                </div>
+
+                {/* Active Filter Banner if artist or playlist selected */}
+                {(selectedArtist || activePlaylist !== 'ALL') && (
+                  <div className="mt-2.5 px-3 py-1.5 rounded-xl bg-purple-950/40 border border-purple-500/30 flex items-center justify-between text-xs">
+                    <span className="text-purple-200 truncate">
+                      Filtrando por:{' '}
+                      <strong className="text-white">
+                        {selectedArtist ? `Artista "${selectedArtist}"` : activePlaylist}
+                      </strong>
+                    </span>
                     <button
                       type="button"
                       onClick={() => {
                         setActivePlaylist('ALL');
                         setSelectedArtist(null);
                       }}
-                      className="text-[11px] text-purple-400 hover:text-purple-300 font-semibold shrink-0"
+                      className="text-purple-400 hover:text-white font-bold ml-2 shrink-0 flex items-center gap-1"
                     >
-                      (Ver todas)
+                      <X className="w-3.5 h-3.5" />
+                      <span>Limpiar</span>
                     </button>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setMobileTab('playlists')}
-                  className="text-xs text-purple-300 font-semibold px-2.5 py-1 rounded-xl bg-purple-600/20 border border-purple-500/30 shrink-0 active:scale-95 transition-transform"
-                >
-                  Listas ▾
-                </button>
+                  </div>
+                )}
               </div>
 
               {/* Mobile Track Table */}
@@ -1116,30 +1212,33 @@ export default function App() {
           {mobileTab === 'favorites' && (
             <div className="flex flex-col w-full">
               {/* Active Favorites Header */}
-              <div className="px-3.5 py-2.5 bg-rose-950/40 border-b border-rose-500/30 flex items-center justify-between gap-2 sticky top-14 z-20 backdrop-blur-md">
-                <div className="min-w-0 flex items-center gap-2 flex-1">
-                  <div className="w-8 h-8 rounded-lg bg-rose-600/20 text-rose-400 flex items-center justify-center border border-rose-500/30 shrink-0">
-                    <Heart className="w-4 h-4 fill-rose-500 text-rose-500" />
+              <div className="px-4 pt-3.5 pb-3 bg-gradient-to-b from-rose-950/60 via-slate-900 to-slate-950 border-b border-rose-500/30">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-10 h-10 rounded-2xl bg-rose-600/20 text-rose-400 flex items-center justify-center border border-rose-500/30 shrink-0 shadow-lg shadow-rose-900/20">
+                      <Heart className="w-5 h-5 fill-rose-500 text-rose-500" />
+                    </div>
+                    <div className="min-w-0">
+                      <h2 className="text-base font-bold text-white truncate">
+                        Tus Canciones Favoritas
+                      </h2>
+                      <p className="text-xs text-rose-300 truncate">
+                        {favoriteTracks.length} canciones con corazón ❤️
+                      </p>
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <span className="text-xs font-bold text-white truncate block">
-                      Tus Canciones Favoritas
-                    </span>
-                    <span className="text-[11px] text-rose-300">
-                      {favoriteTracks.length} canciones con corazón ❤️
-                    </span>
-                  </div>
+
+                  {favoriteTracks.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => playTrackDirect(favoriteTracks[0], favoriteTracks)}
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 text-white font-semibold text-xs active:scale-95 transition-transform shadow-md shadow-rose-600/30 shrink-0"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-current" />
+                      <span>Reproducir</span>
+                    </button>
+                  )}
                 </div>
-                {favoriteTracks.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => playTrackDirect(favoriteTracks[0], favoriteTracks)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 text-white font-semibold text-xs active:scale-95 transition-transform shadow-md shadow-rose-600/30 shrink-0"
-                  >
-                    <Play className="w-3.5 h-3.5 fill-current" />
-                    <span>Reproducir</span>
-                  </button>
-                )}
               </div>
 
               {/* Favorites Track Table */}
@@ -1342,6 +1441,8 @@ export default function App() {
       <EqualizerModal
         isOpen={isEqualizerOpen}
         onClose={() => setIsEqualizerOpen(false)}
+        playbackSource={playbackSource}
+        onTogglePlaybackSource={handleTogglePlaybackSource}
       />
 
       {/* Sleep Timer Modal */}

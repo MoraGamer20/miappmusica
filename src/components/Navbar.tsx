@@ -112,7 +112,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 type="text"
                 value={searchQuery}
                 onChange={(e) => onSearchChange(e.target.value)}
-                placeholder="Buscar en mis canciones..."
+                placeholder="Buscar canción o artista..."
                 className="w-full bg-slate-800/90 text-slate-100 placeholder-slate-400 text-xs sm:text-sm rounded-xl pl-8 sm:pl-10 pr-8 sm:pr-10 py-1.5 sm:py-2 border border-slate-700/80 focus:outline-none focus:ring-2 focus:ring-purple-500/60 focus:border-purple-500 transition-all shadow-inner truncate"
               />
               {searchQuery ? (
@@ -134,6 +134,18 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Mobile Right Controls (< sm) */}
           <div className="flex items-center gap-1.5 sm:hidden shrink-0">
+            {onOpenEqualizer && (
+              <button
+                type="button"
+                onClick={onOpenEqualizer}
+                className="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 text-purple-400 flex items-center justify-center active:bg-slate-700 transition-colors"
+                aria-label="Abrir Ecualizador"
+                title="Ecualizador"
+              >
+                <Sliders className="w-4 h-4" />
+              </button>
+            )}
+
             {/* Mobile Menu Drawer Button */}
             <button
               type="button"

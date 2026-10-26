@@ -182,13 +182,26 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({
           </div>
 
           {/* Right: Quick Touch Actions */}
-          <div className="flex items-center gap-1 shrink-0">
+          <div className="flex items-center gap-0.5 shrink-0">
+            {/* Equalizer Quick Button */}
+            {onOpenEqualizer && (
+              <button
+                type="button"
+                onClick={onOpenEqualizer}
+                aria-label="Abrir Ecualizador"
+                className="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-purple-400 active:scale-90 transition-transform"
+                title="Ecualizador"
+              >
+                <Sliders className="w-4 h-4 text-purple-400" />
+              </button>
+            )}
+
             {/* Heart toggle */}
             <button
               type="button"
               onClick={() => onToggleFavorite(currentTrack.id)}
               aria-label={currentTrack.isFavorite ? 'Quitar de favoritos' : 'Añadir a favoritos'}
-              className="w-10 h-10 flex items-center justify-center text-slate-400 active:scale-90 transition-transform"
+              className="w-9 h-9 flex items-center justify-center text-slate-400 active:scale-90 transition-transform"
             >
               <Heart
                 className={`w-4 h-4 ${currentTrack.isFavorite ? 'text-rose-500 fill-rose-500' : ''}`}
@@ -200,7 +213,7 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({
               type="button"
               onClick={onTogglePlay}
               aria-label={isPlaying ? 'Pausar' : 'Reproducir'}
-              className="w-10 h-10 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-500 text-white flex items-center justify-center shadow-md shadow-purple-600/30 active:scale-95 transition-transform"
+              className="w-10 h-10 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-500 text-white flex items-center justify-center shadow-md shadow-purple-600/30 active:scale-95 transition-transform ml-0.5"
             >
               {isPlaying ? (
                 <Pause className="w-5 h-5 fill-current" />
@@ -214,7 +227,7 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({
               type="button"
               onClick={onOpenFullPlayer}
               aria-label="Expandir reproductor"
-              className="w-10 h-10 flex items-center justify-center text-slate-400 active:text-white"
+              className="w-9 h-9 flex items-center justify-center text-slate-400 active:text-white"
             >
               <Maximize2 className="w-4 h-4" />
             </button>
