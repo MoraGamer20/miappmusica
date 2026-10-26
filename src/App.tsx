@@ -24,6 +24,11 @@ import { YouTubeAudioEmbed } from './components/YouTubeAudioEmbed';
 import { FullTrackDownloadModal } from './components/FullTrackDownloadModal';
 import { BulkLibraryDownloadModal } from './components/BulkLibraryDownloadModal';
 import { VercelDeployModal } from './components/VercelDeployModal';
+import { LyricsModal } from './components/LyricsModal';
+import { EqualizerModal } from './components/EqualizerModal';
+import { SleepTimerModal } from './components/SleepTimerModal';
+import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
+import { equalizer } from './utils/equalizerService';
 
 const STORAGE_KEY = 'deezer_library_tracks_v2';
 const CUSTOM_PLAYLISTS_KEY = 'deezer_custom_playlists_v2';
@@ -76,6 +81,27 @@ export default function App() {
   const [downloadModalTrack, setDownloadModalTrack] = useState<Track | null>(null);
   const [isBulkDownloadOpen, setIsBulkDownloadOpen] = useState(false);
   const [isVercelModalOpen, setIsVercelModalOpen] = useState(false);
+  const [isLyricsOpen, setIsLyricsOpen] = useState(false);
+  const [isEqualizerOpen, setIsEqualizerOpen] = useState(false);
+  const [isSleepTimerOpen, setIsSleepTimerOpen] = useState(false);
+  const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
+  const [sleepTimerSecondsRemaining, setSleepTimerSecondsRemaining] = useState<number | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimeoutRef = useRef<number | null>(null);
+  const originalVolumeRef = useRef<number>(volume);
+  const lastTickTimeRef = useRef<number>(performance.now());
+  const playbackSourceRef = useRef<PlaybackSource>(playbackSource);
+  playbackSourceRef.current = playbackSource;
+  const durationRef = useRef<number>(duration);
+  durationRef.current = duration;
+
+  const showToast = useCallback((msg: string) => {
+    setToastMessage(msg);
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    toastTimeoutRef.current = window.setTimeout(() => {
+      setToastMessage(null);
+    }, 2500);
+  }, []);
 
   // Batch download state
   const [batchDownloadState, setBatchDownloadState] = useState<{
@@ -386,17 +412,22 @@ export default function App() {
   };
 
   const handleSeek = (time: number) => {
-    setCurrentTime(time);
+    const clamped = Math.max(0, Math.min(duration, time));
+    setCurrentTime(clamped);
+    lastTickTimeRef.current = performance.now();
     if (playbackSource === 'full' && activeVideoId) {
-      setSeekTimestamp(time);
+      setSeekTimestamp(clamped);
       setTimeout(() => setSeekTimestamp(null), 150);
-    } else if (audioRef.current && !isNaN(audioRef.current.duration)) {
-      audioRef.current.currentTime = time;
+    } else if (audioRef.current) {
+      try {
+        audioRef.current.currentTime = clamped;
+      } catch {}
     }
   };
 
   const handleVolumeChange = (vol: number) => {
     setVolume(vol);
+    originalVolumeRef.current = vol;
     setIsMuted(vol === 0);
     if (audioRef.current) {
       audioRef.current.volume = vol;
@@ -417,13 +448,16 @@ export default function App() {
     setRepeatMode(modes[nextIdx]);
   };
 
-  // Setup Audio element listeners
+  // Setup Audio element listeners & Equalizer integration
   useEffect(() => {
     const audio = audioRef.current || new Audio();
     audioRef.current = audio;
+    equalizer.attachAudioElement(audio);
 
     const onTimeUpdate = () => {
-      setCurrentTime(audio.currentTime);
+      if (playbackSourceRef.current === 'preview' && !audio.paused && audio.currentTime > 0) {
+        setCurrentTime(audio.currentTime);
+      }
     };
 
     const onLoadedMetadata = () => {
@@ -464,31 +498,139 @@ export default function App() {
     };
   }, [handleNextTrack, currentTrack]);
 
-  // Master Progress Timer: guarantees progress bar moves fluidly while playing in all modes
+  // Master Progress Timer: guarantees progress bar moves fluidly (10 times per second)
   useEffect(() => {
     if (!isPlaying) return;
 
-    const timer = setInterval(() => {
-      setCurrentTime((prev) => {
-        // If preview mode and HTML5 audio is playing, synchronize directly with it
-        if (playbackSource === 'preview' && audioRef.current && !audioRef.current.paused) {
-          return audioRef.current.currentTime;
-        }
+    lastTickTimeRef.current = performance.now();
 
-        // Advance smoothly by 0.25s
-        const next = prev + 0.25;
-        if (duration > 0 && next >= duration) {
+    const timer = setInterval(() => {
+      const now = performance.now();
+      const deltaSec = Math.max(0, (now - lastTickTimeRef.current) / 1000);
+      lastTickTimeRef.current = now;
+
+      // If preview mode with native HTML5 audio playing
+      if (
+        playbackSourceRef.current === 'preview' &&
+        audioRef.current &&
+        !audioRef.current.paused &&
+        audioRef.current.currentTime > 0
+      ) {
+        setCurrentTime(audioRef.current.currentTime);
+        return;
+      }
+
+      // Full track mode (YouTube) or synth audio: advance smoothly by deltaSec
+      setCurrentTime((prev) => {
+        const next = prev + deltaSec;
+        const currentDur = durationRef.current;
+        if (currentDur > 0 && next >= currentDur) {
           handleNextTrack();
           return 0;
         }
         return next;
       });
-    }, 250);
+    }, 100);
 
     return () => clearInterval(timer);
-  }, [isPlaying, playbackSource, duration, handleNextTrack]);
+  }, [isPlaying, handleNextTrack]);
 
-  // Keyboard shortcuts (Space, ArrowLeft, ArrowRight, M)
+  // Sleep timer engine
+  const handleSetSleepTimer = (minutes: number) => {
+    originalVolumeRef.current = volume;
+    setSleepTimerSecondsRemaining(minutes * 60);
+    showToast(`Temporizador programado para ${minutes} minutos 🌙`);
+  };
+
+  const handleCancelSleepTimer = () => {
+    setSleepTimerSecondsRemaining(null);
+    if (volume !== originalVolumeRef.current) {
+      setVolume(originalVolumeRef.current);
+      if (audioRef.current) audioRef.current.volume = originalVolumeRef.current;
+    }
+    showToast('Temporizador de apagado cancelado');
+  };
+
+  useEffect(() => {
+    if (sleepTimerSecondsRemaining === null) return;
+
+    if (sleepTimerSecondsRemaining <= 0) {
+      setIsPlaying(false);
+      if (audioRef.current) audioRef.current.pause();
+      setSleepTimerSecondsRemaining(null);
+      setVolume(originalVolumeRef.current);
+      if (audioRef.current) audioRef.current.volume = originalVolumeRef.current;
+      showToast('Música pausada por temporizador de apagado 🌙');
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setSleepTimerSecondsRemaining((prev) => {
+        if (prev === null) return null;
+        if (prev <= 1) return 0;
+        const next = prev - 1;
+        // Fade out smoothly in the last 15 seconds
+        if (next <= 15 && next > 0) {
+          const fadeRatio = next / 15;
+          const fadedVol = Math.max(0, originalVolumeRef.current * fadeRatio);
+          setVolume(fadedVol);
+          if (audioRef.current) audioRef.current.volume = fadedVol;
+        }
+        return next;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [sleepTimerSecondsRemaining, showToast]);
+
+  // Native Media Session API (lock-screen controls, notification drawer, multimedia keyboard)
+  useEffect(() => {
+    if (!('mediaSession' in navigator) || !currentTrack) return;
+
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: currentTrack.title,
+        artist: currentTrack.artist,
+        album: currentTrack.album || 'Single',
+        artwork: currentTrack.coverUrl
+          ? [
+              { src: currentTrack.coverUrl, sizes: '96x96', type: 'image/jpeg' },
+              { src: currentTrack.coverUrl, sizes: '256x256', type: 'image/jpeg' },
+              { src: currentTrack.coverUrl, sizes: '512x512', type: 'image/jpeg' },
+            ]
+          : [
+              { src: '/pwa-192x192.png', sizes: '192x192', type: 'image/png' },
+              { src: '/pwa-512x512.png', sizes: '512x512', type: 'image/png' },
+            ],
+      });
+
+      navigator.mediaSession.setActionHandler('play', () => handleTogglePlay());
+      navigator.mediaSession.setActionHandler('pause', () => handleTogglePlay());
+      navigator.mediaSession.setActionHandler('previoustrack', () => handlePreviousTrack());
+      navigator.mediaSession.setActionHandler('nexttrack', () => handleNextTrack());
+      navigator.mediaSession.setActionHandler('seekto', (details) => {
+        if (typeof details.seekTime === 'number') {
+          handleSeek(details.seekTime);
+        }
+      });
+    } catch {}
+  }, [currentTrack, handleNextTrack]);
+
+  useEffect(() => {
+    if (!('mediaSession' in navigator) || duration <= 0) return;
+    try {
+      navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+      if (!isNaN(currentTime) && currentTime >= 0) {
+        navigator.mediaSession.setPositionState({
+          duration: Math.max(1, duration),
+          playbackRate: isPlaying ? 1 : 0,
+          position: Math.min(duration, Math.max(0, currentTime)),
+        });
+      }
+    } catch {}
+  }, [isPlaying, currentTime, duration]);
+
+  // Keyboard shortcuts (Space, ArrowLeft, ArrowRight, M, L, E, T, ?, Esc)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement).tagName)) {
@@ -497,10 +639,10 @@ export default function App() {
       if (e.code === 'Space') {
         e.preventDefault();
         handleTogglePlay();
-      } else if (e.code === 'ArrowRight') {
+      } else if (e.code === 'ArrowRight' || e.key === 'n' || e.key === 'N') {
         e.preventDefault();
         handleNextTrack();
-      } else if (e.code === 'ArrowLeft') {
+      } else if (e.code === 'ArrowLeft' || e.key === 'p' || e.key === 'P') {
         e.preventDefault();
         handlePreviousTrack();
       } else if (e.key === 'm' || e.key === 'M') {
@@ -508,6 +650,31 @@ export default function App() {
       } else if (e.key === '/') {
         e.preventDefault();
         document.querySelector('input[type="text"]')?.dispatchEvent(new Event('focus'));
+      } else if (e.key === 'l' || e.key === 'L') {
+        e.preventDefault();
+        if (currentTrack) setIsLyricsOpen((prev) => !prev);
+      } else if (e.key === 'e' || e.key === 'E') {
+        e.preventDefault();
+        setIsEqualizerOpen((prev) => !prev);
+      } else if (e.key === 't' || e.key === 'T') {
+        e.preventDefault();
+        setIsSleepTimerOpen((prev) => !prev);
+      } else if (e.key === '?' || e.key === 'h' || e.key === 'H') {
+        e.preventDefault();
+        setIsShortcutsOpen((prev) => !prev);
+      } else if (e.key === 'Escape') {
+        setIsLyricsOpen(false);
+        setIsEqualizerOpen(false);
+        setIsSleepTimerOpen(false);
+        setIsShortcutsOpen(false);
+        setIsFullPlayerOpen(false);
+        setIsQueueOpen(false);
+        setIsAddModalOpen(false);
+        setIsStatsModalOpen(false);
+        setEditingTrack(null);
+        setDownloadModalTrack(null);
+        setIsBulkDownloadOpen(false);
+        setIsVercelModalOpen(false);
       }
     };
 
@@ -517,9 +684,13 @@ export default function App() {
 
   // Library Mutations
   const handleToggleFavorite = (trackId: string) => {
+    let msg = '';
     const next = tracks.map((t) => {
       if (t.id === trackId) {
         const nextFav = !t.isFavorite;
+        msg = nextFav
+          ? `"${t.title}" se unió a Favoritos ♥`
+          : `"${t.title}" se retiró de Favoritos`;
         return {
           ...t,
           isFavorite: nextFav,
@@ -532,6 +703,7 @@ export default function App() {
     if (currentTrack?.id === trackId) {
       setCurrentTrack((prev) => (prev ? { ...prev, isFavorite: !prev.isFavorite } : null));
     }
+    if (msg) showToast(msg);
   };
 
   const handleDeleteTrack = (trackId: string) => {
@@ -703,7 +875,7 @@ export default function App() {
     let favoriteCount = 0;
 
     for (const t of tracks) {
-      if (t.isFavorite || isFavoritesPlaylist(t.playlist)) {
+      if (t.isFavorite) {
         favoriteCount++;
       }
       const name = t.playlist || 'Biblioteca';
@@ -742,9 +914,9 @@ export default function App() {
     // Filter by Playlist
     if (activePlaylist !== 'ALL') {
       if (isFavoritesPlaylist(activePlaylist)) {
-        result = result.filter((t) => t.isFavorite || isFavoritesPlaylist(t.playlist));
+        result = result.filter((t) => Boolean(t.isFavorite));
       } else {
-        result = result.filter((t) => t.playlist.toLowerCase() === activePlaylist.toLowerCase());
+        result = result.filter((t) => (t.playlist || '').toLowerCase() === activePlaylist.toLowerCase());
       }
     }
 
@@ -794,6 +966,11 @@ export default function App() {
         activePlaylist={activePlaylist}
         onOpenBulkDownloadModal={() => setIsBulkDownloadOpen(true)}
         onOpenVercelGuide={() => setIsVercelModalOpen(true)}
+        onOpenKeyboardShortcuts={() => setIsShortcutsOpen(true)}
+        onOpenEqualizer={() => setIsEqualizerOpen(true)}
+        onOpenSleepTimer={() => setIsSleepTimerOpen(true)}
+        onOpenLyrics={() => setIsLyricsOpen(true)}
+        hasActiveTrack={currentTrack !== null}
       />
 
       {/* Main Layout: Sidebar + Track Table */}
@@ -848,6 +1025,10 @@ export default function App() {
             setIsAddModalOpen(true);
           }}
           onOpenVercelGuide={() => setIsVercelModalOpen(true)}
+          onOpenLyrics={() => setIsLyricsOpen(true)}
+          onOpenEqualizer={() => setIsEqualizerOpen(true)}
+          onOpenSleepTimer={() => setIsSleepTimerOpen(true)}
+          hasCurrentTrack={currentTrack !== null}
         />
 
         <TrackTable
@@ -882,8 +1063,14 @@ export default function App() {
         volume={volume}
         isMuted={isMuted}
         onTimeUpdate={(curr, dur) => {
-          if (typeof curr === 'number' && !isNaN(curr)) {
-            setCurrentTime((prev) => (Math.abs(curr - prev) > 1.2 ? curr : prev));
+          if (typeof curr === 'number' && !isNaN(curr) && curr > 0.5) {
+            setCurrentTime((prev) => {
+              if (Math.abs(curr - prev) > 2.0) {
+                lastTickTimeRef.current = performance.now();
+                return curr;
+              }
+              return prev;
+            });
           }
           if (dur > 0 && Math.abs(dur - duration) > 2) {
             setDuration(dur);
@@ -918,6 +1105,10 @@ export default function App() {
         playbackSource={playbackSource}
         onTogglePlaybackSource={handleTogglePlaybackSource}
         onOpenDownloadModal={(track) => setDownloadModalTrack(track)}
+        onOpenLyrics={() => setIsLyricsOpen(true)}
+        onOpenEqualizer={() => setIsEqualizerOpen(true)}
+        onOpenSleepTimer={() => setIsSleepTimerOpen(true)}
+        sleepTimerRemaining={sleepTimerSecondsRemaining}
       />
 
       {/* Fullscreen Player Modal */}
@@ -944,6 +1135,10 @@ export default function App() {
         playbackSource={playbackSource}
         onTogglePlaybackSource={handleTogglePlaybackSource}
         onOpenDownloadModal={(track) => setDownloadModalTrack(track)}
+        onOpenLyrics={() => setIsLyricsOpen(true)}
+        onOpenEqualizer={() => setIsEqualizerOpen(true)}
+        onOpenSleepTimer={() => setIsSleepTimerOpen(true)}
+        sleepTimerRemaining={sleepTimerSecondsRemaining}
       />
 
       {/* Queue Drawer */}
@@ -968,6 +1163,36 @@ export default function App() {
             localStorage.removeItem(RECENTLY_PLAYED_KEY);
           } catch {}
         }}
+      />
+
+      {/* Synced Lyrics / Karaoke Modal */}
+      <LyricsModal
+        isOpen={isLyricsOpen}
+        onClose={() => setIsLyricsOpen(false)}
+        track={currentTrack}
+        currentTime={currentTime}
+        onSeek={handleSeek}
+      />
+
+      {/* 5-Band Sound Equalizer Modal */}
+      <EqualizerModal
+        isOpen={isEqualizerOpen}
+        onClose={() => setIsEqualizerOpen(false)}
+      />
+
+      {/* Sleep Timer Modal */}
+      <SleepTimerModal
+        isOpen={isSleepTimerOpen}
+        onClose={() => setIsSleepTimerOpen(false)}
+        timerMinutesRemaining={sleepTimerSecondsRemaining}
+        onSetTimer={handleSetSleepTimer}
+        onCancelTimer={handleCancelSleepTimer}
+      />
+
+      {/* Keyboard Shortcuts Cheat Sheet Modal */}
+      <KeyboardShortcutsModal
+        isOpen={isShortcutsOpen}
+        onClose={() => setIsShortcutsOpen(false)}
       />
 
       {/* Single Full Song Download Modal */}
@@ -1033,6 +1258,13 @@ export default function App() {
         currentTrackTitle={batchDownloadState.currentTrackTitle}
         isComplete={batchDownloadState.isComplete}
       />
+
+      {/* Interactive Toast Notifications */}
+      {toastMessage && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-slate-900/95 border border-purple-500/50 text-white text-xs sm:text-sm font-semibold px-4 py-2.5 rounded-2xl shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 duration-200 flex items-center gap-2 pointer-events-none">
+          <span>{toastMessage}</span>
+        </div>
+      )}
     </div>
   );
 }

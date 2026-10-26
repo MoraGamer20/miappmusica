@@ -82,27 +82,18 @@ export const YouTubeAudioEmbed: React.FC<YouTubeAudioEmbedProps> = ({
     }
   }, [seekTime, videoId]);
 
-  // Polling loop: request current time from YouTube & provide fallback progression if blocked
+  // Polling loop: request current time and duration from YouTube
   useEffect(() => {
     if (!videoId || !isPlaying) return;
 
     const interval = setInterval(() => {
-      // 1. Send active polling commands to YouTube
       sendCommand('getCurrentTime');
       sendCommand('getDuration');
       sendListening();
-
-      // 2. If YouTube postMessage is delayed or blocked by cross-origin security,
-      // tick local progress forward so the UI progress bar advances smoothly
-      const now = Date.now();
-      if (now - lastPostMessageTimeRef.current > 1200) {
-        localCurrentTimeRef.current += 0.5;
-        onTimeUpdate(localCurrentTimeRef.current, 0);
-      }
     }, 500);
 
     return () => clearInterval(interval);
-  }, [videoId, isPlaying, onTimeUpdate]);
+  }, [videoId, isPlaying]);
 
   // Message listener from YouTube iframe
   useEffect(() => {
@@ -111,15 +102,13 @@ export const YouTubeAudioEmbed: React.FC<YouTubeAudioEmbedProps> = ({
         const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
         if (!data) return;
 
-        lastPostMessageTimeRef.current = Date.now();
-
         // 1. YouTube standard infoDelivery payload
         if (data.event === 'infoDelivery' && data.info) {
           const info = data.info;
           let curr: number | null = null;
           let dur = 0;
 
-          if (typeof info.currentTime === 'number') {
+          if (typeof info.currentTime === 'number' && info.currentTime >= 0) {
             curr = info.currentTime;
           }
           if (typeof info.duration === 'number' && info.duration > 0) {
@@ -127,7 +116,6 @@ export const YouTubeAudioEmbed: React.FC<YouTubeAudioEmbedProps> = ({
           }
 
           if (curr !== null) {
-            localCurrentTimeRef.current = curr;
             onTimeUpdate(curr, dur);
           }
 
@@ -137,9 +125,8 @@ export const YouTubeAudioEmbed: React.FC<YouTubeAudioEmbedProps> = ({
           }
         }
 
-        // 2. Response to getCurrentTime command
-        if (typeof data.info === 'number') {
-          localCurrentTimeRef.current = data.info;
+        // 2. Direct numeric response
+        if (typeof data.info === 'number' && data.info >= 0) {
           onTimeUpdate(data.info, 0);
         }
       } catch {}

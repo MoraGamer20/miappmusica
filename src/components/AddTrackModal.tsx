@@ -17,6 +17,7 @@ import {
   Square,
   Globe,
   Radio,
+  Heart,
 } from 'lucide-react';
 import { Track } from '../types/music';
 import { searchOnlineMusicCatalog } from '../utils/deezerService';
@@ -69,6 +70,7 @@ export const AddTrackModal: React.FC<AddTrackModalProps> = ({
   const [targetPlaylist, setTargetPlaylist] = useState(availablePlaylists[0] || 'Biblioteca');
   const [isCreatingPlaylist, setIsCreatingPlaylist] = useState(false);
   const [newPlaylistInput, setNewPlaylistInput] = useState('');
+  const [alsoMarkFavorite, setAlsoMarkFavorite] = useState(false);
 
   // In-modal audio preview player
   const [playingPreviewId, setPlayingPreviewId] = useState<string | null>(null);
@@ -179,7 +181,7 @@ export const AddTrackModal: React.FC<AddTrackModalProps> = ({
 
   // Add individual track
   const handleAddFromSearch = (item: Track) => {
-    const isFav = targetPlaylist.toLowerCase().includes('favorit');
+    const isFav = Boolean(alsoMarkFavorite || targetPlaylist.toLowerCase().includes('favorit'));
     onAddTrack({
       title: item.title,
       artist: item.artist,
@@ -203,7 +205,7 @@ export const AddTrackModal: React.FC<AddTrackModalProps> = ({
     );
     if (toAdd.length === 0) return;
 
-    const isFav = targetPlaylist.toLowerCase().includes('favorit');
+    const isFav = Boolean(alsoMarkFavorite || targetPlaylist.toLowerCase().includes('favorit'));
     if (onBatchAddTracks) {
       onBatchAddTracks(
         toAdd.map((item) => ({
@@ -267,7 +269,7 @@ export const AddTrackModal: React.FC<AddTrackModalProps> = ({
     e.preventDefault();
     if (!manualTitle.trim() || !manualArtist.trim()) return;
 
-    const isFav = targetPlaylist.toLowerCase().includes('favorit');
+    const isFav = Boolean(alsoMarkFavorite || targetPlaylist.toLowerCase().includes('favorit'));
     onAddTrack({
       title: manualTitle.trim(),
       artist: manualArtist.trim(),
@@ -410,6 +412,33 @@ export const AddTrackModal: React.FC<AddTrackModalProps> = ({
                 </button>
               </form>
             )}
+            <label
+              title="Marcar también con corazón para unir a Favoritos"
+              className="flex items-center gap-1.5 cursor-pointer select-none"
+            >
+              <input
+                type="checkbox"
+                checked={alsoMarkFavorite || targetPlaylist.toLowerCase().includes('favorit')}
+                onChange={(e) => setAlsoMarkFavorite(e.target.checked)}
+                className="sr-only"
+              />
+              <span
+                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-xs transition-colors ${
+                  alsoMarkFavorite || targetPlaylist.toLowerCase().includes('favorit')
+                    ? 'bg-rose-500/20 border-rose-500/50 text-rose-300 font-semibold'
+                    : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Heart
+                  className={`w-3.5 h-3.5 ${
+                    alsoMarkFavorite || targetPlaylist.toLowerCase().includes('favorit')
+                      ? 'fill-rose-500 text-rose-500'
+                      : ''
+                  }`}
+                />
+                <span className="hidden sm:inline">Favorita</span>
+              </span>
+            </label>
           </div>
         </div>
 
