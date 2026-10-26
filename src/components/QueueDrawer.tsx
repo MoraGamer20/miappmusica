@@ -9,9 +9,9 @@ interface QueueDrawerProps {
   queueIndex: number;
   onPlayQueueIndex: (index: number) => void;
   onClearQueue: () => void;
-  recentlyPlayed: Track[];
-  onPlayTrack: (track: Track) => void;
-  onClearRecentlyPlayed: () => void;
+  recentlyPlayed?: Track[];
+  onPlayTrack?: (track: Track) => void;
+  onClearRecentlyPlayed?: () => void;
 }
 
 export const QueueDrawer: React.FC<QueueDrawerProps> = ({
@@ -21,9 +21,9 @@ export const QueueDrawer: React.FC<QueueDrawerProps> = ({
   queueIndex,
   onPlayQueueIndex,
   onClearQueue,
-  recentlyPlayed,
-  onPlayTrack,
-  onClearRecentlyPlayed,
+  recentlyPlayed = [],
+  onPlayTrack = () => {},
+  onClearRecentlyPlayed = () => {},
 }) => {
   const [activeTab, setActiveTab] = useState<'queue' | 'recent'>('queue');
 

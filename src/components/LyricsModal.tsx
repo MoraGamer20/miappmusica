@@ -121,7 +121,7 @@ export const LyricsModal: React.FC<LyricsModalProps> = ({
         <div className="px-6 py-4 border-b border-neutral-800 flex items-center justify-between bg-neutral-900/90 backdrop-blur">
           <div className="flex items-center gap-3 min-w-0">
             <img
-              src={track.albumCover || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=100&h=100&fit=crop'}
+              src={track.coverUrl || track.albumCover || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=100&h=100&fit=crop'}
               alt={track.title}
               className="w-12 h-12 rounded-xl object-cover shadow border border-neutral-700/60 shrink-0"
             />

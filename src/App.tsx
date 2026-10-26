@@ -27,6 +27,7 @@ import { VercelDeployModal } from './components/VercelDeployModal';
 
 const STORAGE_KEY = 'deezer_library_tracks_v2';
 const CUSTOM_PLAYLISTS_KEY = 'deezer_custom_playlists_v2';
+const RECENTLY_PLAYED_KEY = 'deezer_recently_played_v1';
 const DEFAULT_CSV_PATH = '/assets/aistudio/My_Deezer_Library_e6092c00.csv';
 
 export const isFavoritesPlaylist = (name: string): boolean => {
@@ -48,6 +49,7 @@ export default function App() {
   const [activePlaylist, setActivePlaylist] = useState<string>('ALL');
   const [selectedArtist, setSelectedArtist] = useState<string | null>(null);
   const [customPlaylists, setCustomPlaylists] = useState<string[]>([]);
+  const [recentlyPlayed, setRecentlyPlayed] = useState<Track[]>([]);
 
   // Player state
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
@@ -102,6 +104,10 @@ export default function App() {
       const savedCustom = localStorage.getItem(CUSTOM_PLAYLISTS_KEY);
       if (savedCustom) {
         setCustomPlaylists(JSON.parse(savedCustom));
+      }
+      const savedRecent = localStorage.getItem(RECENTLY_PLAYED_KEY);
+      if (savedRecent) {
+        setRecentlyPlayed(JSON.parse(savedRecent));
       }
     } catch {}
 
@@ -198,6 +204,15 @@ export default function App() {
       setCurrentTrack(track);
       setIsPlaying(true);
       setCurrentTime(0);
+
+      // Record in recently played
+      setRecentlyPlayed((prev) => {
+        const next = [track, ...prev.filter((t) => t.id !== track.id)].slice(0, 30);
+        try {
+          localStorage.setItem(RECENTLY_PLAYED_KEY, JSON.stringify(next));
+        } catch {}
+        return next;
+      });
 
       // Fetch cover art & details
       let previewUrl = track.previewUrl;
@@ -944,6 +959,14 @@ export default function App() {
         onClearQueue={() => {
           setQueue([]);
           setQueueIndex(0);
+        }}
+        recentlyPlayed={recentlyPlayed}
+        onPlayTrack={(track) => playTrackDirect(track)}
+        onClearRecentlyPlayed={() => {
+          setRecentlyPlayed([]);
+          try {
+            localStorage.removeItem(RECENTLY_PLAYED_KEY);
+          } catch {}
         }}
       />
 

@@ -9,6 +9,7 @@ export interface Track {
   deezerId: string;
   previewUrl?: string;
   coverUrl?: string;
+  albumCover?: string;
   duration?: number;
   isFavorite?: boolean;
   notes?: string;
