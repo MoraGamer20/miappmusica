@@ -293,26 +293,26 @@ export const AddTrackModal: React.FC<AddTrackModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-150">
       <div className="relative w-full max-w-3xl bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col text-slate-100 max-h-[92vh]">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/90">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-purple-600 via-indigo-600 to-rose-500 flex items-center justify-center text-white shadow-lg shadow-purple-600/30">
-              <Search className="w-5 h-5" />
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-800 bg-slate-900/90">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-tr from-purple-600 via-indigo-600 to-rose-500 flex items-center justify-center text-white shadow-lg shadow-purple-600/30 shrink-0">
+              <Search className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold text-white">
-                  Buscador & Descargador de Canciones
+                <h3 className="text-sm sm:text-base font-bold text-white truncate">
+                  Buscador de Canciones
                 </h3>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 font-semibold">
+                <span className="hidden sm:inline-block text-[10px] px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 font-semibold">
                   Catálogo Global
                 </span>
               </div>
-              <p className="text-xs text-slate-400">
-                Encuentra cualquier canción, escúchala, descárgala en MP3 y agrégala a tus listas
+              <p className="text-[11px] sm:text-xs text-slate-400 truncate">
+                Encuentra cualquier canción, escúchala y agrégala
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             {onOpenVercelGuide && (
               <button
                 type="button"
@@ -336,7 +336,7 @@ export const AddTrackModal: React.FC<AddTrackModalProps> = ({
         </div>
 
         {/* Tab switch & Target Playlist bar */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-b border-slate-800 bg-slate-900/60 px-6 py-2.5">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3 border-b border-slate-800 bg-slate-900/60 px-4 sm:px-6 py-2.5">
           <div className="flex items-center gap-1">
             <button
               type="button"

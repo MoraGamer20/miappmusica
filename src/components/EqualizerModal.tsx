@@ -39,29 +39,29 @@ export const EqualizerModal: React.FC<EqualizerModalProps> = ({ isOpen, onClose 
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="px-6 py-4 border-b border-neutral-800 flex items-center justify-between bg-gradient-to-r from-neutral-900 via-neutral-900 to-indigo-950/40">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center border border-indigo-500/30 shadow-inner">
-              <Sliders className="w-5 h-5" />
+        <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-neutral-800 flex items-center justify-between gap-2 bg-gradient-to-r from-neutral-900 via-neutral-900 to-indigo-950/40">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center border border-indigo-500/30 shadow-inner shrink-0">
+              <Sliders className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-            <div>
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                Ecualizador de Sonido
-                <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                  Web Audio API
+            <div className="min-w-0">
+              <h3 className="text-sm sm:text-lg font-bold text-white flex items-center gap-2 truncate">
+                <span>Ecualizador</span>
+                <span className="hidden sm:inline-block text-xs px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                  Web Audio
                 </span>
               </h3>
-              <p className="text-xs text-neutral-400">
-                Ajusta las 5 bandas de frecuencia para optimizar el sonido a tus altavoces o audífonos
+              <p className="text-[11px] sm:text-xs text-neutral-400 truncate">
+                Ajusta las 5 bandas de frecuencia
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 shrink-0">
             {/* Master Toggle */}
-            <label className="flex items-center gap-2 cursor-pointer bg-neutral-800/80 px-3 py-1.5 rounded-lg border border-neutral-700/60 hover:border-neutral-600 transition-colors">
-              <span className="text-xs font-medium text-neutral-300">
-                {settings.enabled ? 'Activado' : 'Desactivado'}
+            <label className="flex items-center gap-1.5 sm:gap-2 cursor-pointer bg-neutral-800/80 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg border border-neutral-700/60 hover:border-neutral-600 transition-colors">
+              <span className="text-[11px] sm:text-xs font-medium text-neutral-300">
+                {settings.enabled ? 'On' : 'Off'}
               </span>
               <input
                 type="checkbox"

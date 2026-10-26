@@ -106,35 +106,35 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
 
       <div className="relative w-full max-w-2xl bg-slate-900/90 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl flex flex-col items-center text-white z-10 max-h-[95vh] overflow-y-auto">
         {/* Top Header Bar */}
-        <div className="w-full flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2 text-xs text-purple-400 font-semibold tracking-wide uppercase">
+        <div className="w-full flex items-center justify-between gap-2 mb-4">
+          <div className="flex items-center gap-1.5 text-xs text-purple-400 font-semibold tracking-wide uppercase shrink-0">
             <Radio className="w-4 h-4 animate-pulse" />
-            <span>Reproduciendo Ahora</span>
+            <span className="hidden sm:inline">Reproduciendo Ahora</span>
           </div>
 
           {/* Mode Switch Pill in Modal */}
-          <div className="flex items-center bg-slate-800 p-0.5 rounded-xl border border-slate-700 text-xs">
+          <div className="flex items-center bg-slate-800 p-0.5 rounded-xl border border-slate-700 text-xs shrink-0">
             <button
               type="button"
               onClick={() => playbackSource !== 'full' && onTogglePlaybackSource()}
-              className={`px-3 py-1 rounded-lg font-semibold transition-colors ${
+              className={`px-2.5 sm:px-3 py-1 rounded-lg font-semibold transition-colors ${
                 playbackSource === 'full'
                   ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-sm'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              🎵 Canción Completa
+              🎵 Completa
             </button>
             <button
               type="button"
               onClick={() => playbackSource !== 'preview' && onTogglePlaybackSource()}
-              className={`px-3 py-1 rounded-lg font-medium transition-colors ${
+              className={`px-2.5 sm:px-3 py-1 rounded-lg font-medium transition-colors ${
                 playbackSource === 'preview'
                   ? 'bg-purple-600 text-white shadow-sm'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              ⏱️ Preview (30s)
+              ⏱️ 30s
             </button>
           </div>
 
@@ -142,7 +142,7 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
             type="button"
             onClick={onClose}
             aria-label="Cerrar reproductor ampliado"
-            className="p-2 text-slate-400 hover:text-white rounded-full hover:bg-slate-800 transition-colors"
+            className="p-2 text-slate-400 hover:text-white rounded-full hover:bg-slate-800 transition-colors shrink-0"
           >
             <X className="w-5 h-5" />
           </button>

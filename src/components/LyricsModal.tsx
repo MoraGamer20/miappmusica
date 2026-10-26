@@ -118,27 +118,33 @@ export const LyricsModal: React.FC<LyricsModalProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Top Header */}
-        <div className="px-6 py-4 border-b border-neutral-800 flex items-center justify-between bg-neutral-900/90 backdrop-blur">
-          <div className="flex items-center gap-3 min-w-0">
-            <img
-              src={track.coverUrl || track.albumCover || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=100&h=100&fit=crop'}
-              alt={track.title}
-              className="w-12 h-12 rounded-xl object-cover shadow border border-neutral-700/60 shrink-0"
-            />
+        <div className="px-3 sm:px-6 py-3 sm:py-4 border-b border-neutral-800 flex items-center justify-between gap-2 bg-neutral-900/90 backdrop-blur">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            {track.coverUrl ? (
+              <img
+                src={track.coverUrl}
+                alt={track.title}
+                className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl object-cover shadow border border-neutral-700/60 shrink-0"
+              />
+            ) : (
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-purple-900/60 flex items-center justify-center text-purple-300 shrink-0">
+                <Music className="w-5 h-5" />
+              </div>
+            )}
             <div className="min-w-0">
-              <h3 className="font-bold text-white text-base truncate flex items-center gap-2">
-                {track.title}
+              <h3 className="font-bold text-white text-sm sm:text-base truncate flex items-center gap-1.5 sm:gap-2">
+                <span className="truncate">{track.title}</span>
                 {lyricsData?.isSynced && (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-pink-500/20 text-pink-300 border border-pink-500/30 font-medium">
-                    Karaoke Sincronizado
+                  <span className="hidden sm:inline-block text-[10px] px-2 py-0.5 rounded-full bg-pink-500/20 text-pink-300 border border-pink-500/30 font-medium shrink-0">
+                    Karaoke
                   </span>
                 )}
               </h3>
-              <p className="text-xs text-neutral-400 truncate">{track.artist} • {track.album}</p>
+              <p className="text-xs text-neutral-400 truncate">{track.artist} {track.album ? `• ${track.album}` : ''}</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {/* Font size picker */}
             <div className="flex items-center bg-neutral-800/80 rounded-lg p-0.5 border border-neutral-700/60">
               <button

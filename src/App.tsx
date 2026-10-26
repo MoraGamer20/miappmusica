@@ -944,7 +944,7 @@ export default function App() {
   }, [tracks, activePlaylist, selectedArtist, searchQuery]);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-purple-500 selection:text-white">
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-purple-500 selection:text-white">
       {/* Top Navigation */}
       <Navbar
         searchQuery={searchQuery}
@@ -974,9 +974,9 @@ export default function App() {
       />
 
       {/* Main Layout: Sidebar + Track Table */}
-      <div className="flex-1 flex flex-col md:flex-row min-w-0">
+      <div className="flex-1 flex flex-col md:flex-row min-w-0 w-full max-w-full overflow-x-hidden">
         {/* Mobile Horizontal Playlist Pills Bar */}
-        <div className="md:hidden flex items-center gap-2 overflow-x-auto p-3 bg-slate-900 border-b border-slate-800 scrollbar-none">
+        <div className="md:hidden flex items-center gap-2 overflow-x-auto p-2.5 sm:p-3 bg-slate-900 border-b border-slate-800 scrollbar-none w-full max-w-full shrink-0">
           <button
             type="button"
             onClick={() => {
