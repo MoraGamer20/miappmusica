@@ -108,7 +108,7 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
   if (!currentTrack) {
     return (
-      <footer className="fixed bottom-0 left-0 right-0 h-16 sm:h-20 bg-slate-900/95 border-t border-slate-800 text-slate-500 flex items-center justify-between px-4 sm:px-6 z-30 backdrop-blur-lg">
+      <footer className="hidden sm:flex fixed bottom-0 left-0 right-0 h-16 sm:h-20 bg-slate-900/95 border-t border-slate-800 text-slate-500 items-center justify-between px-4 sm:px-6 z-30 backdrop-blur-lg">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-slate-800 flex items-center justify-center shrink-0">
             <Music className="w-4 h-4 sm:w-5 sm:h-5 text-slate-600" />
@@ -129,9 +129,9 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({
     <>
       {/* =========================================
           1. MOBILE MINI-PLAYER (< sm)
-          Thumb-friendly Spotify-style sticky dock
+          Thumb-friendly Spotify-style sticky dock above Bottom Navigation Bar
          ========================================= */}
-      <footer className="sm:hidden fixed bottom-0 left-0 right-0 z-30 bg-slate-900/95 border-t border-slate-800/80 backdrop-blur-xl shadow-2xl flex flex-col pb-safe">
+      <footer className="sm:hidden fixed bottom-16 left-0 right-0 z-30 bg-slate-900/95 border-t border-slate-800/80 backdrop-blur-xl shadow-2xl flex flex-col">
         {/* Slim top progress line */}
         <div
           ref={mobileProgressRef}

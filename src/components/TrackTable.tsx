@@ -161,7 +161,7 @@ export const TrackTable: React.FC<TrackTableProps> = ({
   };
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 w-full max-w-full bg-slate-950 pb-28 overflow-x-hidden">
+    <div className="flex-1 flex flex-col min-w-0 w-full max-w-full bg-slate-950 pb-36 overflow-x-hidden">
       {/* Top Controls Bar */}
       <div className="flex items-center justify-between gap-2 px-3 sm:px-6 py-2.5 sm:py-3.5 border-b border-slate-800 bg-slate-900/60 sticky top-14 sm:top-16 z-20 backdrop-blur-md w-full max-w-full">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
@@ -238,7 +238,7 @@ export const TrackTable: React.FC<TrackTableProps> = ({
 
       {/* Floating Batch Actions Bar (visible when 1+ tracks are checked) */}
       {selectedIds.size > 0 && (
-        <div className="fixed bottom-20 sm:bottom-24 left-1/2 -translate-x-1/2 z-40 bg-slate-900 border border-purple-500/50 rounded-2xl shadow-2xl shadow-purple-900/40 px-3 sm:px-5 py-2.5 sm:py-3 flex items-center gap-2 sm:gap-4 text-xs animate-in fade-in slide-in-from-bottom-3 duration-200 max-w-2xl w-[94%] sm:w-auto overflow-x-auto">
+        <div className="fixed bottom-32 sm:bottom-24 left-1/2 -translate-x-1/2 z-40 bg-slate-900 border border-purple-500/50 rounded-2xl shadow-2xl shadow-purple-900/40 px-3 sm:px-5 py-2.5 sm:py-3 flex items-center gap-2 sm:gap-4 text-xs animate-in fade-in slide-in-from-bottom-3 duration-200 max-w-2xl w-[94%] sm:w-auto overflow-x-auto">
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <span className="w-6 h-6 rounded-full bg-purple-600 text-white font-bold flex items-center justify-center text-xs">
               {selectedIds.size}

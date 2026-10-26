@@ -28,9 +28,15 @@ import { LyricsModal } from './components/LyricsModal';
 import { EqualizerModal } from './components/EqualizerModal';
 import { SleepTimerModal } from './components/SleepTimerModal';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
+import { MobileBottomNav, MobileTabType } from './components/MobileBottomNav';
+import { MobilePlaylistsView } from './components/MobilePlaylistsView';
+import { MobileArtistsView } from './components/MobileArtistsView';
+import { MobileToolsView } from './components/MobileToolsView';
 import { equalizer } from './utils/equalizerService';
+import defaultCsvRaw from '../public/assets/aistudio/My_Deezer_Library_e6092c00.csv?raw';
+import { Heart, Play } from 'lucide-react';
 
-const STORAGE_KEY = 'deezer_library_tracks_v2';
+const STORAGE_KEY = 'deezer_library_tracks_v4_authentic';
 const CUSTOM_PLAYLISTS_KEY = 'deezer_custom_playlists_v2';
 const RECENTLY_PLAYED_KEY = 'deezer_recently_played_v1';
 const DEFAULT_CSV_PATH = '/assets/aistudio/My_Deezer_Library_e6092c00.csv';
@@ -47,14 +53,41 @@ export const isFavoritesPlaylist = (name: string): boolean => {
   );
 };
 
+// Parse authentic user library directly from the bundled CSV (2,117 Deezer tracks)
+const ORIGINAL_DEEZER_TRACKS: Track[] = parseCSV(defaultCsvRaw).map((t: Track) => ({
+  ...t,
+  isFavorite: Boolean(
+    t.isFavorite || isFavoritesPlaylist(t.playlist) || t.type?.toLowerCase().includes('fav')
+  ),
+}));
+
+const getInitialTracks = (): Track[] => {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length >= 1000) {
+        return parsed.map((t: Track) => ({
+          ...t,
+          isFavorite: Boolean(
+            t.isFavorite || isFavoritesPlaylist(t.playlist) || t.type?.toLowerCase().includes('fav')
+          ),
+        }));
+      }
+    }
+  } catch {}
+  return ORIGINAL_DEEZER_TRACKS;
+};
+
 export default function App() {
-  const [tracks, setTracks] = useState<Track[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [tracks, setTracks] = useState<Track[]>(getInitialTracks);
+  const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activePlaylist, setActivePlaylist] = useState<string>('ALL');
   const [selectedArtist, setSelectedArtist] = useState<string | null>(null);
   const [customPlaylists, setCustomPlaylists] = useState<string[]>([]);
   const [recentlyPlayed, setRecentlyPlayed] = useState<Track[]>([]);
+  const [mobileTab, setMobileTab] = useState<MobileTabType>('tracks');
 
   // Player state
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
@@ -137,48 +170,27 @@ export default function App() {
       }
     } catch {}
 
-    const loadLibrary = async () => {
-      try {
-        const savedTracks = localStorage.getItem(STORAGE_KEY);
-        if (savedTracks) {
-          const parsed = JSON.parse(savedTracks);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            const normalized = parsed.map((t: Track) => ({
-              ...t,
-              isFavorite: Boolean(
-                t.isFavorite || isFavoritesPlaylist(t.playlist) || t.type?.toLowerCase().includes('fav')
-              ),
-            }));
-            setTracks(normalized);
-            setIsLoading(false);
-            return;
-          }
-        }
-
-        // Fetch CSV attachment
-        const response = await fetch(DEFAULT_CSV_PATH);
-        if (response.ok) {
-          const text = await response.text();
-          const parsed = parseCSV(text).map((t: Track) => ({
-            ...t,
-            isFavorite: Boolean(
-              t.isFavorite || isFavoritesPlaylist(t.playlist) || t.type?.toLowerCase().includes('fav')
-            ),
-          }));
-          setTracks(parsed);
-          try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
-          } catch {}
-        }
-      } catch (err) {
-        console.error('Failed to load initial library', err);
-      } finally {
-        setIsLoading(false);
+    // Ensure authentic library is persisted in storage
+    try {
+      const savedTracks = localStorage.getItem(STORAGE_KEY);
+      if (!savedTracks) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(ORIGINAL_DEEZER_TRACKS));
       }
-    };
-
-    loadLibrary();
+    } catch {}
+    setIsLoading(false);
   }, []);
+
+  // Restore original library callback
+  const handleRestoreOriginalLibrary = useCallback(() => {
+    setTracks(ORIGINAL_DEEZER_TRACKS);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(ORIGINAL_DEEZER_TRACKS));
+    } catch {}
+    setActivePlaylist('ALL');
+    setSelectedArtist(null);
+    setSearchQuery('');
+    showToast(`Biblioteca Deezer restaurada: ${ORIGINAL_DEEZER_TRACKS.length.toLocaleString()} canciones auténticas`);
+  }, [showToast]);
 
   // Persist tracks when modified
   const updateTracks = useCallback((newTracks: Track[]) => {
@@ -943,6 +955,13 @@ export default function App() {
     return result;
   }, [tracks, activePlaylist, selectedArtist, searchQuery]);
 
+  // All authentic favorite tracks
+  const favoriteTracks = useMemo(() => {
+    return tracks.filter(
+      (t) => Boolean(t.isFavorite || isFavoritesPlaylist(t.playlist) || t.type?.toLowerCase().includes('fav'))
+    );
+  }, [tracks]);
+
   return (
     <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-purple-500 selection:text-white">
       {/* Top Navigation */}
@@ -973,43 +992,9 @@ export default function App() {
         hasActiveTrack={currentTrack !== null}
       />
 
-      {/* Main Layout: Sidebar + Track Table */}
+      {/* Main Layout: Desktop Sidebar + Track Table, OR Mobile Dedicated Tabs */}
       <div className="flex-1 flex flex-col md:flex-row min-w-0 w-full max-w-full overflow-x-hidden">
-        {/* Mobile Horizontal Playlist Pills Bar */}
-        <div className="md:hidden flex items-center gap-2 overflow-x-auto p-2.5 sm:p-3 bg-slate-900 border-b border-slate-800 scrollbar-none w-full max-w-full shrink-0">
-          <button
-            type="button"
-            onClick={() => {
-              setActivePlaylist('ALL');
-              setSelectedArtist(null);
-            }}
-            className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors ${
-              activePlaylist === 'ALL' && selectedArtist === null
-                ? 'bg-purple-600 text-white'
-                : 'bg-slate-800 text-slate-300 hover:text-white'
-            }`}
-          >
-            Todas ({tracks.length})
-          </button>
-          {playlistsList.map((pl) => (
-            <button
-              key={pl.name}
-              type="button"
-              onClick={() => {
-                setActivePlaylist(pl.name);
-                setSelectedArtist(null);
-              }}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors ${
-                activePlaylist === pl.name && selectedArtist === null
-                  ? 'bg-purple-600 text-white'
-                  : 'bg-slate-800 text-slate-300 hover:text-white'
-              }`}
-            >
-              {pl.name} ({pl.count})
-            </button>
-          ))}
-        </div>
-
+        {/* DESKTOP SIDEBAR (hidden on mobile) */}
         <Sidebar
           playlists={playlistsList}
           activePlaylist={activePlaylist}
@@ -1031,29 +1016,208 @@ export default function App() {
           hasCurrentTrack={currentTrack !== null}
         />
 
-        <TrackTable
-          tracks={filteredTracks}
-          currentTrack={currentTrack}
-          isPlaying={isPlaying}
-          onPlayTrack={playTrackDirect}
-          onTogglePlay={handleTogglePlay}
-          onToggleFavorite={handleToggleFavorite}
-          onDeleteTrack={handleDeleteTrack}
-          onEditTrack={(track) => setEditingTrack(track)}
-          onBatchDownloadZip={handleBatchDownloadZip}
-          onBatchExportM3U={handleBatchExportM3U}
-          onBatchExportCSV={handleBatchExportCSV}
-          onBatchAddToPlaylist={handleBatchAddToPlaylist}
-          onBatchDelete={handleBatchDelete}
-          onBatchMarkFavorite={handleBatchMarkFavorite}
-          availablePlaylists={availablePlaylistNames}
-          searchQuery={searchQuery}
-          onOpenDownloadModal={(track) => setDownloadModalTrack(track)}
-          onOpenSearchModal={(query) => {
-            setSearchModalInitialQuery(query || '');
-            setIsAddModalOpen(true);
-          }}
-        />
+        {/* =========================================
+            MOBILE VIEW (< md): 4 Dedicated Full Tabs
+            ========================================= */}
+        <div className="md:hidden flex-1 min-w-0 w-full">
+          {mobileTab === 'tracks' && (
+            <div className="flex flex-col w-full">
+              {/* Active Playlist/Artist Header Bar on Mobile */}
+              <div className="px-3.5 py-2.5 bg-slate-900/95 border-b border-slate-800/90 flex items-center justify-between gap-2 sticky top-14 z-20 backdrop-blur-md">
+                <div className="min-w-0 flex items-center gap-1.5 flex-1">
+                  <span className="text-[11px] font-semibold text-slate-400 shrink-0">Lista:</span>
+                  <span className="text-xs font-bold text-white truncate bg-slate-800 px-2 py-0.5 rounded-lg border border-slate-700/80">
+                    {selectedArtist
+                      ? `Artista: ${selectedArtist}`
+                      : activePlaylist === 'ALL'
+                      ? 'Todas las Canciones'
+                      : activePlaylist}
+                  </span>
+                  {(selectedArtist || activePlaylist !== 'ALL') && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActivePlaylist('ALL');
+                        setSelectedArtist(null);
+                      }}
+                      className="text-[11px] text-purple-400 hover:text-purple-300 font-semibold shrink-0"
+                    >
+                      (Ver todas)
+                    </button>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMobileTab('playlists')}
+                  className="text-xs text-purple-300 font-semibold px-2.5 py-1 rounded-xl bg-purple-600/20 border border-purple-500/30 shrink-0 active:scale-95 transition-transform"
+                >
+                  Listas ▾
+                </button>
+              </div>
+
+              {/* Mobile Track Table */}
+              <TrackTable
+                tracks={filteredTracks}
+                currentTrack={currentTrack}
+                isPlaying={isPlaying}
+                onPlayTrack={playTrackDirect}
+                onTogglePlay={handleTogglePlay}
+                onToggleFavorite={handleToggleFavorite}
+                onDeleteTrack={handleDeleteTrack}
+                onEditTrack={(track) => setEditingTrack(track)}
+                onBatchDownloadZip={handleBatchDownloadZip}
+                onBatchExportM3U={handleBatchExportM3U}
+                onBatchExportCSV={handleBatchExportCSV}
+                onBatchAddToPlaylist={handleBatchAddToPlaylist}
+                onBatchDelete={handleBatchDelete}
+                onBatchMarkFavorite={handleBatchMarkFavorite}
+                availablePlaylists={availablePlaylistNames}
+                searchQuery={searchQuery}
+                onOpenDownloadModal={(track) => setDownloadModalTrack(track)}
+                onOpenSearchModal={(query) => {
+                  setSearchModalInitialQuery(query || '');
+                  setIsAddModalOpen(true);
+                }}
+              />
+            </div>
+          )}
+
+          {mobileTab === 'playlists' && (
+            <MobilePlaylistsView
+              playlists={playlistsList}
+              activePlaylist={activePlaylist}
+              onSelectPlaylist={setActivePlaylist}
+              onCreatePlaylist={handleCreatePlaylist}
+              onDeleteCustomPlaylist={handleDeleteCustomPlaylist}
+              topArtists={stats.topArtists}
+              selectedArtist={selectedArtist}
+              onSelectArtist={setSelectedArtist}
+              totalTracks={tracks.length}
+              onNavigateToTracks={() => setMobileTab('tracks')}
+            />
+          )}
+
+          {mobileTab === 'artists' && (
+            <MobileArtistsView
+              topArtists={stats.topArtists}
+              selectedArtist={selectedArtist}
+              onSelectArtist={setSelectedArtist}
+              onNavigateToTracks={() => setMobileTab('tracks')}
+              onPlayArtistSongs={(artist) => {
+                const artistSongs = tracks.filter((t) => t.artist.toLowerCase() === artist.toLowerCase());
+                if (artistSongs.length > 0) {
+                  playTrackDirect(artistSongs[0], artistSongs);
+                }
+              }}
+              tracks={tracks}
+            />
+          )}
+
+          {mobileTab === 'favorites' && (
+            <div className="flex flex-col w-full">
+              {/* Active Favorites Header */}
+              <div className="px-3.5 py-2.5 bg-rose-950/40 border-b border-rose-500/30 flex items-center justify-between gap-2 sticky top-14 z-20 backdrop-blur-md">
+                <div className="min-w-0 flex items-center gap-2 flex-1">
+                  <div className="w-8 h-8 rounded-lg bg-rose-600/20 text-rose-400 flex items-center justify-center border border-rose-500/30 shrink-0">
+                    <Heart className="w-4 h-4 fill-rose-500 text-rose-500" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-xs font-bold text-white truncate block">
+                      Tus Canciones Favoritas
+                    </span>
+                    <span className="text-[11px] text-rose-300">
+                      {favoriteTracks.length} canciones con corazón ❤️
+                    </span>
+                  </div>
+                </div>
+                {favoriteTracks.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => playTrackDirect(favoriteTracks[0], favoriteTracks)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 text-white font-semibold text-xs active:scale-95 transition-transform shadow-md shadow-rose-600/30 shrink-0"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    <span>Reproducir</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Favorites Track Table */}
+              <TrackTable
+                tracks={favoriteTracks}
+                currentTrack={currentTrack}
+                isPlaying={isPlaying}
+                onPlayTrack={playTrackDirect}
+                onTogglePlay={handleTogglePlay}
+                onToggleFavorite={handleToggleFavorite}
+                onDeleteTrack={handleDeleteTrack}
+                onEditTrack={(track) => setEditingTrack(track)}
+                onBatchDownloadZip={handleBatchDownloadZip}
+                onBatchExportM3U={handleBatchExportM3U}
+                onBatchExportCSV={handleBatchExportCSV}
+                onBatchAddToPlaylist={handleBatchAddToPlaylist}
+                onBatchDelete={handleBatchDelete}
+                onBatchMarkFavorite={handleBatchMarkFavorite}
+                availablePlaylists={availablePlaylistNames}
+                searchQuery={searchQuery}
+                onOpenDownloadModal={(track) => setDownloadModalTrack(track)}
+                onOpenSearchModal={(query) => {
+                  setSearchModalInitialQuery(query || '');
+                  setIsAddModalOpen(true);
+                }}
+              />
+            </div>
+          )}
+
+          {mobileTab === 'tools' && (
+            <MobileToolsView
+              totalTracks={tracks.length}
+              uniqueArtists={stats.uniqueArtists}
+              duplicateCount={stats.duplicateCount}
+              activePlaylist={activePlaylist}
+              onOpenStats={() => setIsStatsModalOpen(true)}
+              onOpenDuplicates={handleDeduplicate}
+              onOpenBulkDownload={() => setIsBulkDownloadOpen(true)}
+              onOpenEqualizer={() => setIsEqualizerOpen(true)}
+              onOpenLyrics={() => setIsLyricsOpen(true)}
+              onOpenSleepTimer={() => setIsSleepTimerOpen(true)}
+              onExportCSV={() => downloadTracksAsCSV(filteredTracks, `Deezer_Export_${activePlaylist}.csv`)}
+              onExportM3U={() => downloadTracksAsM3U(filteredTracks, `Deezer_${activePlaylist}`)}
+              onExportJSON={() => downloadTracksAsJSON(filteredTracks, `Deezer_Export_${activePlaylist}.json`)}
+              onImportCSVFile={handleImportCSVFile}
+              onRestoreOriginalLibrary={handleRestoreOriginalLibrary}
+              hasActiveTrack={currentTrack !== null}
+              sleepTimerRemaining={sleepTimerSecondsRemaining}
+            />
+          )}
+        </div>
+
+        {/* DESKTOP TRACK TABLE (hidden on mobile, visible on md and up) */}
+        <div className="hidden md:flex flex-1 min-w-0">
+          <TrackTable
+            tracks={filteredTracks}
+            currentTrack={currentTrack}
+            isPlaying={isPlaying}
+            onPlayTrack={playTrackDirect}
+            onTogglePlay={handleTogglePlay}
+            onToggleFavorite={handleToggleFavorite}
+            onDeleteTrack={handleDeleteTrack}
+            onEditTrack={(track) => setEditingTrack(track)}
+            onBatchDownloadZip={handleBatchDownloadZip}
+            onBatchExportM3U={handleBatchExportM3U}
+            onBatchExportCSV={handleBatchExportCSV}
+            onBatchAddToPlaylist={handleBatchAddToPlaylist}
+            onBatchDelete={handleBatchDelete}
+            onBatchMarkFavorite={handleBatchMarkFavorite}
+            availablePlaylists={availablePlaylistNames}
+            searchQuery={searchQuery}
+            onOpenDownloadModal={(track) => setDownloadModalTrack(track)}
+            onOpenSearchModal={(query) => {
+              setSearchModalInitialQuery(query || '');
+              setIsAddModalOpen(true);
+            }}
+          />
+        </div>
       </div>
 
       {/* Background Full Audio Stream Player */}
@@ -1265,6 +1429,15 @@ export default function App() {
           <span>{toastMessage}</span>
         </div>
       )}
+
+      {/* Persistent Mobile Bottom Navigation Bar (md:hidden) */}
+      <MobileBottomNav
+        activeTab={mobileTab}
+        onChangeTab={setMobileTab}
+        tracksCount={filteredTracks.length}
+        playlistsCount={playlistsList.length}
+        favoritesCount={favoriteTracks.length}
+      />
     </div>
   );
 }

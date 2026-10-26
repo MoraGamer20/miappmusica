@@ -35,18 +35,7 @@ interface AddTrackModalProps {
   onOpenVercelGuide?: () => void;
 }
 
-const QUICK_TRENDING_CHIPS = [
-  'Morat',
-  'Bad Bunny',
-  'Twenty One Pilots',
-  'Ed Maverick',
-  'Rock en Español',
-  'Reggaeton 2024',
-  'Pop Latino',
-  'Kevin Kaarl',
-  'Coldplay',
-  'Måneskin',
-];
+// Clean modal without hardcoded external trending chips
 
 export const AddTrackModal: React.FC<AddTrackModalProps> = ({
   isOpen,
@@ -454,7 +443,7 @@ export const AddTrackModal: React.FC<AddTrackModalProps> = ({
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Escribe el nombre de cualquier canción o artista (ej. Morat, Bad Bunny, Queen)..."
+                    placeholder="Escribe el nombre de cualquier canción o artista a buscar..."
                     className="w-full bg-slate-800 text-xs sm:text-sm text-white pl-10 pr-10 py-2.5 rounded-2xl border border-slate-700/80 focus:outline-none focus:ring-2 focus:ring-purple-500/60 placeholder-slate-400 shadow-inner"
                     autoFocus
                   />
@@ -481,23 +470,6 @@ export const AddTrackModal: React.FC<AddTrackModalProps> = ({
                   <span>Buscar</span>
                 </button>
               </form>
-
-              {/* Quick trending chips */}
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
-                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider shrink-0 flex items-center gap-1">
-                  <Sparkles className="w-3 h-3 text-purple-400" /> Sugeridos:
-                </span>
-                {QUICK_TRENDING_CHIPS.map((chip) => (
-                  <button
-                    key={chip}
-                    type="button"
-                    onClick={() => handleSelectQuickChip(chip)}
-                    className="px-2.5 py-1 rounded-xl bg-slate-800/80 hover:bg-purple-900/30 hover:border-purple-500/40 border border-slate-700/60 text-slate-300 hover:text-purple-200 text-[11px] whitespace-nowrap transition-colors"
-                  >
-                    {chip}
-                  </button>
-                ))}
-              </div>
 
               {/* Selection Bar & Controls (if results exist) */}
               {searchResults.length > 0 && (
