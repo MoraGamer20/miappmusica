@@ -29,6 +29,18 @@ const STORAGE_KEY = 'deezer_library_tracks_v2';
 const CUSTOM_PLAYLISTS_KEY = 'deezer_custom_playlists_v2';
 const DEFAULT_CSV_PATH = '/assets/aistudio/My_Deezer_Library_e6092c00.csv';
 
+export const isFavoritesPlaylist = (name: string): boolean => {
+  if (!name) return false;
+  const lower = name.toLowerCase().trim();
+  return (
+    lower === 'favorite tracks' ||
+    lower === 'favoritas' ||
+    lower === 'favoritos' ||
+    lower === 'canciones favoritas' ||
+    lower.includes('favorit')
+  );
+};
+
 export default function App() {
   const [tracks, setTracks] = useState<Track[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -99,7 +111,13 @@ export default function App() {
         if (savedTracks) {
           const parsed = JSON.parse(savedTracks);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            setTracks(parsed);
+            const normalized = parsed.map((t: Track) => ({
+              ...t,
+              isFavorite: Boolean(
+                t.isFavorite || isFavoritesPlaylist(t.playlist) || t.type?.toLowerCase().includes('fav')
+              ),
+            }));
+            setTracks(normalized);
             setIsLoading(false);
             return;
           }
@@ -109,7 +127,12 @@ export default function App() {
         const response = await fetch(DEFAULT_CSV_PATH);
         if (response.ok) {
           const text = await response.text();
-          const parsed = parseCSV(text);
+          const parsed = parseCSV(text).map((t: Track) => ({
+            ...t,
+            isFavorite: Boolean(
+              t.isFavorite || isFavoritesPlaylist(t.playlist) || t.type?.toLowerCase().includes('fav')
+            ),
+          }));
           setTracks(parsed);
           try {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
@@ -426,6 +449,30 @@ export default function App() {
     };
   }, [handleNextTrack, currentTrack]);
 
+  // Master Progress Timer: guarantees progress bar moves fluidly while playing in all modes
+  useEffect(() => {
+    if (!isPlaying) return;
+
+    const timer = setInterval(() => {
+      setCurrentTime((prev) => {
+        // If preview mode and HTML5 audio is playing, synchronize directly with it
+        if (playbackSource === 'preview' && audioRef.current && !audioRef.current.paused) {
+          return audioRef.current.currentTime;
+        }
+
+        // Advance smoothly by 0.25s
+        const next = prev + 0.25;
+        if (duration > 0 && next >= duration) {
+          handleNextTrack();
+          return 0;
+        }
+        return next;
+      });
+    }, 250);
+
+    return () => clearInterval(timer);
+  }, [isPlaying, playbackSource, duration, handleNextTrack]);
+
   // Keyboard shortcuts (Space, ArrowLeft, ArrowRight, M)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -455,7 +502,17 @@ export default function App() {
 
   // Library Mutations
   const handleToggleFavorite = (trackId: string) => {
-    const next = tracks.map((t) => (t.id === trackId ? { ...t, isFavorite: !t.isFavorite } : t));
+    const next = tracks.map((t) => {
+      if (t.id === trackId) {
+        const nextFav = !t.isFavorite;
+        return {
+          ...t,
+          isFavorite: nextFav,
+          type: nextFav ? 'Favorite' : (t.type === 'Favorite' ? 'Track' : t.type),
+        };
+      }
+      return t;
+    });
     updateTracks(next);
     if (currentTrack?.id === trackId) {
       setCurrentTrack((prev) => (prev ? { ...prev, isFavorite: !prev.isFavorite } : null));
@@ -476,8 +533,11 @@ export default function App() {
   };
 
   const handleAddTrack = (trackData: Omit<Track, 'id'>) => {
+    const isFav = Boolean(trackData.isFavorite || isFavoritesPlaylist(trackData.playlist));
     const newTrack: Track = {
       ...trackData,
+      isFavorite: isFav,
+      type: isFav ? 'Favorite' : (trackData.type || 'Track'),
       id: `track-custom-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       addedAt: Date.now(),
     };
@@ -486,11 +546,16 @@ export default function App() {
   };
 
   const handleBatchAddTracks = (trackDataList: Omit<Track, 'id'>[]) => {
-    const newTracks: Track[] = trackDataList.map((td, idx) => ({
-      ...td,
-      id: `track-custom-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 7)}`,
-      addedAt: Date.now(),
-    }));
+    const newTracks: Track[] = trackDataList.map((td, idx) => {
+      const isFav = Boolean(td.isFavorite || isFavoritesPlaylist(td.playlist));
+      return {
+        ...td,
+        isFavorite: isFav,
+        type: isFav ? 'Favorite' : (td.type || 'Track'),
+        id: `track-custom-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 7)}`,
+        addedAt: Date.now(),
+      };
+    });
     const next = [...newTracks, ...tracks];
     updateTracks(next);
   };
@@ -620,19 +685,30 @@ export default function App() {
   // Playlist list
   const playlistsList = useMemo(() => {
     const counts: Record<string, number> = {};
+    let favoriteCount = 0;
+
     for (const t of tracks) {
+      if (t.isFavorite || isFavoritesPlaylist(t.playlist)) {
+        favoriteCount++;
+      }
       const name = t.playlist || 'Biblioteca';
-      counts[name] = (counts[name] || 0) + 1;
+      if (!isFavoritesPlaylist(name)) {
+        counts[name] = (counts[name] || 0) + 1;
+      }
     }
 
-    const list: { name: string; count: number; isCustom?: boolean }[] = [];
+    // "Favorite Tracks" is always first, reflecting all favorited tracks
+    const list: { name: string; count: number; isCustom?: boolean }[] = [
+      { name: 'Favorite Tracks', count: favoriteCount, isCustom: false },
+    ];
+
     for (const [name, count] of Object.entries(counts)) {
       list.push({ name, count, isCustom: customPlaylists.includes(name) });
     }
 
     // Include custom playlists that have 0 songs yet
     for (const cp of customPlaylists) {
-      if (!counts[cp]) {
+      if (!counts[cp] && !isFavoritesPlaylist(cp)) {
         list.push({ name: cp, count: 0, isCustom: true });
       }
     }
@@ -650,7 +726,11 @@ export default function App() {
 
     // Filter by Playlist
     if (activePlaylist !== 'ALL') {
-      result = result.filter((t) => t.playlist.toLowerCase() === activePlaylist.toLowerCase());
+      if (isFavoritesPlaylist(activePlaylist)) {
+        result = result.filter((t) => t.isFavorite || isFavoritesPlaylist(t.playlist));
+      } else {
+        result = result.filter((t) => t.playlist.toLowerCase() === activePlaylist.toLowerCase());
+      }
     }
 
     // Filter by Artist
@@ -787,7 +867,9 @@ export default function App() {
         volume={volume}
         isMuted={isMuted}
         onTimeUpdate={(curr, dur) => {
-          setCurrentTime(curr);
+          if (typeof curr === 'number' && !isNaN(curr)) {
+            setCurrentTime((prev) => (Math.abs(curr - prev) > 1.2 ? curr : prev));
+          }
           if (dur > 0 && Math.abs(dur - duration) > 2) {
             setDuration(dur);
           }

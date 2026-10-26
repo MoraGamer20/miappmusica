@@ -14,7 +14,11 @@ import {
   Search,
   Globe,
   Plus,
+  Mic2,
+  Sliders,
+  Moon,
 } from 'lucide-react';
+import { PWAInstallButton } from './PWAInstallButton';
 
 interface SidebarProps {
   playlists: { name: string; count: number; isCustom?: boolean }[];
@@ -28,6 +32,10 @@ interface SidebarProps {
   totalTracks: number;
   onOpenAddModal?: () => void;
   onOpenVercelGuide?: () => void;
+  onOpenEqualizer?: () => void;
+  onOpenSleepTimer?: () => void;
+  onOpenLyrics?: () => void;
+  hasCurrentTrack?: boolean;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -42,6 +50,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   totalTracks,
   onOpenAddModal,
   onOpenVercelGuide,
+  onOpenEqualizer,
+  onOpenSleepTimer,
+  onOpenLyrics,
+  hasCurrentTrack,
 }) => {
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
@@ -243,9 +255,63 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </div>
 
+        {/* Audio Tools & Utilities Section */}
+        <div className="pt-3 border-t border-slate-800 space-y-1">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 px-1">
+            Herramientas de Audio
+          </span>
+
+          {onOpenLyrics && hasCurrentTrack && (
+            <button
+              type="button"
+              onClick={onOpenLyrics}
+              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs hover:bg-slate-800 text-pink-300 hover:text-pink-200 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <Mic2 className="w-3.5 h-3.5 text-pink-400" />
+                <span>Letras / Karaoke</span>
+              </div>
+              <span className="text-[10px] text-pink-400/80 bg-pink-500/10 px-1.5 py-0.5 rounded font-mono">L</span>
+            </button>
+          )}
+
+          {onOpenEqualizer && (
+            <button
+              type="button"
+              onClick={onOpenEqualizer}
+              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs hover:bg-slate-800 text-indigo-300 hover:text-indigo-200 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <Sliders className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Ecualizador 5 Bandas</span>
+              </div>
+              <span className="text-[10px] text-indigo-400/80 bg-indigo-500/10 px-1.5 py-0.5 rounded font-mono">E</span>
+            </button>
+          )}
+
+          {onOpenSleepTimer && (
+            <button
+              type="button"
+              onClick={onOpenSleepTimer}
+              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs hover:bg-slate-800 text-slate-300 hover:text-white transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <Moon className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Temporizador de Apagado</span>
+              </div>
+              <span className="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded font-mono">T</span>
+            </button>
+          )}
+        </div>
+
+        {/* PWA App Install Banner in Sidebar */}
+        <div className="pt-2">
+          <PWAInstallButton variant="sidebar" />
+        </div>
+
         {/* Deploy on Vercel Guide */}
         {onOpenVercelGuide && (
-          <div className="pt-3 border-t border-slate-800">
+          <div className="pt-2 border-t border-slate-800">
             <button
               type="button"
               onClick={onOpenVercelGuide}

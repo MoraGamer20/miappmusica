@@ -179,18 +179,19 @@ export const AddTrackModal: React.FC<AddTrackModalProps> = ({
 
   // Add individual track
   const handleAddFromSearch = (item: Track) => {
+    const isFav = targetPlaylist.toLowerCase().includes('favorit');
     onAddTrack({
       title: item.title,
       artist: item.artist,
       album: item.album || 'Single',
       playlist: targetPlaylist,
-      type: 'Track',
+      type: isFav ? 'Favorite' : 'Track',
       isrc: item.isrc || '',
       deezerId: item.deezerId || '',
       previewUrl: item.previewUrl,
       coverUrl: item.coverUrl,
       duration: item.duration,
-      isFavorite: false,
+      isFavorite: isFav,
     });
     setAddedIds((prev) => new Set(prev).add(item.id));
   };
@@ -202,6 +203,7 @@ export const AddTrackModal: React.FC<AddTrackModalProps> = ({
     );
     if (toAdd.length === 0) return;
 
+    const isFav = targetPlaylist.toLowerCase().includes('favorit');
     if (onBatchAddTracks) {
       onBatchAddTracks(
         toAdd.map((item) => ({
@@ -209,13 +211,13 @@ export const AddTrackModal: React.FC<AddTrackModalProps> = ({
           artist: item.artist,
           album: item.album || 'Single',
           playlist: targetPlaylist,
-          type: 'Track',
+          type: isFav ? 'Favorite' : 'Track',
           isrc: item.isrc || '',
           deezerId: item.deezerId || '',
           previewUrl: item.previewUrl,
           coverUrl: item.coverUrl,
           duration: item.duration,
-          isFavorite: false,
+          isFavorite: isFav,
         }))
       );
     } else {
@@ -265,15 +267,16 @@ export const AddTrackModal: React.FC<AddTrackModalProps> = ({
     e.preventDefault();
     if (!manualTitle.trim() || !manualArtist.trim()) return;
 
+    const isFav = targetPlaylist.toLowerCase().includes('favorit');
     onAddTrack({
       title: manualTitle.trim(),
       artist: manualArtist.trim(),
       album: manualAlbum.trim() || 'Single',
       playlist: targetPlaylist,
-      type: 'Track',
+      type: isFav ? 'Favorite' : 'Track',
       isrc: manualIsrc.trim(),
       deezerId: manualDeezerId.trim(),
-      isFavorite: false,
+      isFavorite: isFav,
     });
 
     setManualTitle('');

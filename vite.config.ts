@@ -2,6 +2,7 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig} from 'vite';
+import { VitePWA } from 'vite-plugin-pwa';
 
 function fullAudioSearchPlugin() {
   return {
@@ -50,7 +51,51 @@ function fullAudioSearchPlugin() {
 
 export default defineConfig(() => {
   return {
-    plugins: [react(), tailwindcss(), fullAudioSearchPlugin()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      fullAudioSearchPlugin(),
+      VitePWA({
+        registerType: 'autoUpdate',
+        includeAssets: ['icon.svg', 'apple-touch-icon.png', 'pwa-192x192.png', 'pwa-512x512.png'],
+        manifest: {
+          id: '/',
+          name: 'Deezer Library Hub - Gestor y Reproductor',
+          short_name: 'DeezerHub',
+          description:
+            'Gestiona, busca, reproduce y descarga tu catálogo de canciones con letras en vivo y ecualizador.',
+          theme_color: '#0f172a',
+          background_color: '#020617',
+          display: 'standalone',
+          start_url: '/',
+          scope: '/',
+          icons: [
+            {
+              src: '/pwa-192x192.png',
+              sizes: '192x192',
+              type: 'image/png',
+              purpose: 'any',
+            },
+            {
+              src: '/pwa-512x512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'any',
+            },
+            {
+              src: '/pwa-maskable-512x512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'maskable',
+            },
+          ],
+        },
+        devOptions: {
+          enabled: true,
+          type: 'module',
+        },
+      }),
+    ],
     resolve: {
       alias: {
         '@': path.resolve(import.meta.dirname || '.', '.'),

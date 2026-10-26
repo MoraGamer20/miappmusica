@@ -13,8 +13,13 @@ import {
   FileJson,
   Sparkles,
   Globe,
+  Command,
+  Sliders,
+  Mic2,
+  Moon,
 } from 'lucide-react';
 import { Track } from '../types/music';
+import { PWAInstallButton } from './PWAInstallButton';
 
 interface NavbarProps {
   searchQuery: string;
@@ -33,6 +38,11 @@ interface NavbarProps {
   activePlaylist: string;
   onOpenBulkDownloadModal: () => void;
   onOpenVercelGuide?: () => void;
+  onOpenKeyboardShortcuts?: () => void;
+  onOpenEqualizer?: () => void;
+  onOpenSleepTimer?: () => void;
+  onOpenLyrics?: () => void;
+  hasActiveTrack?: boolean;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -52,6 +62,11 @@ export const Navbar: React.FC<NavbarProps> = ({
   activePlaylist,
   onOpenBulkDownloadModal,
   onOpenVercelGuide,
+  onOpenKeyboardShortcuts,
+  onOpenEqualizer,
+  onOpenSleepTimer,
+  onOpenLyrics,
+  hasActiveTrack,
 }) => {
   const [showExportMenu, setShowExportMenu] = React.useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -285,6 +300,21 @@ export const Navbar: React.FC<NavbarProps> = ({
               >
                 <Globe className="w-3.5 h-3.5 text-blue-400" />
                 <span>Desplegar en Vercel</span>
+              </button>
+            )}
+
+            {/* PWA Native App Install Button */}
+            <PWAInstallButton variant="navbar" />
+
+            {/* Keyboard Shortcuts Button */}
+            {onOpenKeyboardShortcuts && (
+              <button
+                type="button"
+                onClick={onOpenKeyboardShortcuts}
+                className="hidden md:flex p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors border border-slate-700/60"
+                title="Atajos de teclado y ayuda"
+              >
+                <Command className="w-4 h-4" />
               </button>
             )}
 

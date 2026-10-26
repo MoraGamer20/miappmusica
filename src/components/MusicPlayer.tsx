@@ -16,6 +16,9 @@ import {
   Heart,
   Disc,
   Music,
+  Mic2,
+  Sliders,
+  Moon,
 } from 'lucide-react';
 import { Track } from '../types/music';
 import { AudioVisualizer } from './AudioVisualizer';
@@ -45,6 +48,10 @@ interface MusicPlayerProps {
   playbackSource: 'full' | 'preview';
   onTogglePlaybackSource: () => void;
   onOpenDownloadModal: (track: Track) => void;
+  onOpenLyrics?: () => void;
+  onOpenEqualizer?: () => void;
+  onOpenSleepTimer?: () => void;
+  sleepTimerRemaining?: number | null;
 }
 
 export const MusicPlayer: React.FC<MusicPlayerProps> = ({
@@ -71,6 +78,10 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({
   playbackSource,
   onTogglePlaybackSource,
   onOpenDownloadModal,
+  onOpenLyrics,
+  onOpenEqualizer,
+  onOpenSleepTimer,
+  sleepTimerRemaining,
 }) => {
   const [isDownloading, setIsDownloading] = useState(false);
   const progressBarRef = useRef<HTMLDivElement | null>(null);
@@ -111,7 +122,8 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({
     );
   }
 
-  const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const progressPercent =
+    duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0;
 
   return (
     <footer className="fixed bottom-0 left-0 right-0 h-22 bg-slate-900/95 border-t border-slate-800 text-white flex flex-col justify-between px-4 sm:px-6 py-2.5 z-30 backdrop-blur-xl shadow-2xl">
@@ -294,6 +306,54 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
         {/* Right: Actions, Volume & Tools */}
         <div className="flex items-center justify-end gap-2 sm:gap-3 min-w-0 max-w-[28%]">
+          {/* Lyrics / Karaoke button */}
+          {onOpenLyrics && (
+            <button
+              type="button"
+              onClick={onOpenLyrics}
+              aria-label="Ver letra sincronizada (Karaoke)"
+              className="p-2 text-slate-300 hover:text-pink-400 hover:bg-slate-800 rounded-lg transition-colors"
+              title="Letras en vivo / Modo Karaoke (L)"
+            >
+              <Mic2 className="w-4 h-4" />
+            </button>
+          )}
+
+          {/* Equalizer button */}
+          {onOpenEqualizer && (
+            <button
+              type="button"
+              onClick={onOpenEqualizer}
+              aria-label="Ecualizador de sonido"
+              className="p-2 text-slate-300 hover:text-indigo-400 hover:bg-slate-800 rounded-lg transition-colors"
+              title="Ecualizador de audio y perfiles (E)"
+            >
+              <Sliders className="w-4 h-4" />
+            </button>
+          )}
+
+          {/* Sleep Timer button */}
+          {onOpenSleepTimer && (
+            <button
+              type="button"
+              onClick={onOpenSleepTimer}
+              aria-label="Temporizador de apagado"
+              className={`p-2 rounded-lg transition-colors relative ${
+                sleepTimerRemaining !== null && sleepTimerRemaining !== undefined
+                  ? 'text-indigo-400 bg-indigo-950/60 border border-indigo-500/40'
+                  : 'text-slate-300 hover:text-indigo-300 hover:bg-slate-800'
+              }`}
+              title="Temporizador de apagado (T)"
+            >
+              <Moon className="w-4 h-4" />
+              {sleepTimerRemaining !== null && sleepTimerRemaining !== undefined && (
+                <span className="absolute -top-1 -right-1 text-[9px] font-bold bg-indigo-500 text-white px-1 rounded-full">
+                  {Math.ceil(sleepTimerRemaining / 60)}m
+                </span>
+              )}
+            </button>
+          )}
+
           {/* Direct Download MP3 */}
           <button
             type="button"
@@ -312,7 +372,7 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({
             onClick={onOpenQueue}
             aria-label={`Ver cola (${queueLength})`}
             className="p-2 text-slate-300 hover:text-purple-400 hover:bg-slate-800 rounded-lg transition-colors relative"
-            title="Cola de reproducción"
+            title="Cola de reproducción e historial"
           >
             <ListOrdered className="w-4 h-4" />
             {queueLength > 0 && (

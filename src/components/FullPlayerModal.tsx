@@ -16,6 +16,9 @@ import {
   Disc,
   Radio,
   Share2,
+  Mic2,
+  Sliders,
+  Moon,
 } from 'lucide-react';
 import { Track } from '../types/music';
 import { AudioVisualizer } from './AudioVisualizer';
@@ -44,6 +47,10 @@ interface FullPlayerModalProps {
   playbackSource: 'full' | 'preview';
   onTogglePlaybackSource: () => void;
   onOpenDownloadModal: (track: Track) => void;
+  onOpenLyrics?: () => void;
+  onOpenEqualizer?: () => void;
+  onOpenSleepTimer?: () => void;
+  sleepTimerRemaining?: number | null;
 }
 
 export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
@@ -69,6 +76,10 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
   playbackSource,
   onTogglePlaybackSource,
   onOpenDownloadModal,
+  onOpenLyrics,
+  onOpenEqualizer,
+  onOpenSleepTimer,
+  sleepTimerRemaining,
 }) => {
   if (!isOpen || !track) return null;
 
@@ -81,7 +92,8 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
-  const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const progressPercent =
+    duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0;
 
   const handleDownload = () => {
     onOpenDownloadModal(track);
@@ -286,20 +298,63 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
           />
         </div>
 
-        {/* Action Buttons: Favorite & Download MP3 */}
-        <div className="flex flex-wrap items-center justify-center gap-3 mt-4 pt-4 border-t border-slate-800 w-full">
+        {/* Primary Action Buttons: Favorite, Lyrics, EQ, Sleep Timer, Download */}
+        <div className="flex flex-wrap items-center justify-center gap-2.5 mt-4 pt-4 border-t border-slate-800 w-full">
           <button
             type="button"
             onClick={() => onToggleFavorite(track.id)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold border transition-all ${
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all ${
               track.isFavorite
                 ? 'bg-rose-500/10 border-rose-500/40 text-rose-400'
                 : 'bg-slate-800/80 border-slate-700 text-slate-300 hover:text-white'
             }`}
           >
             <Heart className={`w-4 h-4 ${track.isFavorite ? 'fill-current' : ''}`} />
-            <span>{track.isFavorite ? 'Favorita' : 'Añadir a favoritas'}</span>
+            <span>{track.isFavorite ? 'Favorita' : 'Favoritos'}</span>
           </button>
+
+          {onOpenLyrics && (
+            <button
+              type="button"
+              onClick={onOpenLyrics}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-pink-600/20 hover:bg-pink-600/30 text-pink-300 border border-pink-500/40 transition-colors shadow-sm"
+              title="Ver letra sincronizada (Karaoke)"
+            >
+              <Mic2 className="w-4 h-4 text-pink-400" />
+              <span>Letras / Karaoke</span>
+            </button>
+          )}
+
+          {onOpenEqualizer && (
+            <button
+              type="button"
+              onClick={onOpenEqualizer}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 transition-colors shadow-sm"
+              title="Ajustar bandas de frecuencia"
+            >
+              <Sliders className="w-4 h-4 text-indigo-400" />
+              <span>Ecualizador</span>
+            </button>
+          )}
+
+          {onOpenSleepTimer && (
+            <button
+              type="button"
+              onClick={onOpenSleepTimer}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-colors ${
+                sleepTimerRemaining !== null && sleepTimerRemaining !== undefined
+                  ? 'bg-indigo-600/30 border-indigo-500/50 text-indigo-200'
+                  : 'bg-slate-800/80 hover:bg-slate-800 border-slate-700 text-slate-300 hover:text-white'
+              }`}
+            >
+              <Moon className="w-4 h-4 text-indigo-400" />
+              <span>
+                {sleepTimerRemaining !== null && sleepTimerRemaining !== undefined
+                  ? `Apagado en ${Math.ceil(sleepTimerRemaining / 60)}m`
+                  : 'Temporizador'}
+              </span>
+            </button>
+          )}
 
           <button
             type="button"
