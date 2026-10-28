@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, FileArchive, CheckCircle2, Loader2, Music } from 'lucide-react';
+import { FileArchive, CheckCircle2, Music } from 'lucide-react';
 
 interface BatchDownloadModalProps {
   isOpen: boolean;
@@ -36,11 +36,11 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
 
         {/* Title */}
         <h3 className="text-base font-bold text-white mb-1">
-          {isComplete ? '¡Paquete ZIP de Canciones Completas Listo!' : 'Preparando Paquete de Descarga Completa...'}
+          {isComplete ? '¡Paquete para Celular Listo!' : 'Preparando Archivo para tu Celular...'}
         </h3>
         <p className="text-xs text-slate-400 mb-5">
           {isComplete
-            ? 'Tu paquete ZIP con los scripts de descarga de canciones completas (320kbps MP3), listas M3U y base de datos ya se ha guardado en tu dispositivo. (Cero fragmentos de 30s)'
+            ? 'Tu archivo ZIP con las listas de reproducción M3U y base de datos se ha guardado en la carpeta de descargas de tu dispositivo. (Cero fragmentos de 30s)'
             : `Procesando ${current} de ${total} canciones seleccionadas`}
         </p>
 

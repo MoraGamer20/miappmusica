@@ -1,8 +1,8 @@
 import JSZip from 'jszip';
 import { Track } from '../types/music';
 import { exportToCSV, generateM3U } from './csvParser';
-import { generateBulkDownloadScripts, getFullDownloadLinks } from './fullAudioService';
-import { saveOfflineAudio, getOfflineAudioBlob } from './offlineAudioStorage';
+import { getFullDownloadLinks } from './fullAudioService';
+import { getOfflineAudioBlob } from './offlineAudioStorage';
 
 /**
  * Downloads a single file in the browser using an anchor tag and Blob / ObjectURL.
@@ -35,7 +35,7 @@ export function downloadTracksAsCSV(tracks: Track[], filename = 'Biblioteca_Canc
 }
 
 /**
- * Exports current tracks as M3U Playlist.
+ * Exports current tracks as M3U Playlist for mobile audio players (VLC, Poweramp, etc.).
  */
 export function downloadTracksAsM3U(tracks: Track[], playlistName = 'Mi Playlist') {
   const m3u = generateM3U(tracks, playlistName);
@@ -52,23 +52,25 @@ export function downloadTracksAsJSON(tracks: Track[], filename = 'Biblioteca_Can
 }
 
 /**
- * Downloads a single track's full audio.
- * NEVER downloads 30-second promotional clips to disk.
- * If local full audio exists, downloads it directly.
- * Otherwise, opens the direct 1-click full-song MP3 downloader in a new window.
+ * Downloads a single track's full audio directly to user's device.
+ * CRITICAL RULE: NEVER downloads 30-second promotional clips to disk!
+ * - If user imported a genuine full audio file (local audio), downloads that real full file.
+ * - Otherwise, opens the direct 1-click full-song MP3 mobile downloader.
  */
 export async function downloadTrackAudio(track: Track): Promise<boolean> {
   try {
-    // 1. If user imported a genuine full audio file or stored it offline, download that full file
-    const storedBlob = await getOfflineAudioBlob(track.id);
-    if (storedBlob && storedBlob.size > 200000) {
-      const safeArtist = (track.artist || 'Artista').replace(/[/\\?%*:|"<>]/g, '_');
-      const safeTitle = (track.title || 'Cancion').replace(/[/\\?%*:|"<>]/g, '_');
-      triggerFileDownload(storedBlob, `${safeArtist} - ${safeTitle}.mp3`);
-      return true;
+    // 1. If user imported a genuine local full audio file, download that full file
+    if (track.type === 'Local') {
+      const storedBlob = await getOfflineAudioBlob(track.id);
+      if (storedBlob && storedBlob.size > 200000) {
+        const safeArtist = (track.artist || 'Artista').replace(/[/\\?%*:|"<>]/g, '_');
+        const safeTitle = (track.title || 'Cancion').replace(/[/\\?%*:|"<>]/g, '_');
+        triggerFileDownload(storedBlob, `${safeArtist} - ${safeTitle}.mp3`);
+        return true;
+      }
     }
 
-    // 2. Open 1-click full-song MP3 downloader portal (Yout / YouTube audio)
+    // 2. Open direct 1-click full-song MP3 downloader portal (Yout / YouTube audio)
     const links = getFullDownloadLinks(track, null);
     const targetUrl = links.youtUrl || links.youtubeUrl;
     if (typeof window !== 'undefined') {
@@ -82,14 +84,18 @@ export async function downloadTrackAudio(track: Track): Promise<boolean> {
 }
 
 /**
- * Downloads tracks organized by playlist subfolders inside a ZIP file.
- * NOTE: Completely purges 30-second promotional clips!
- * Delivers full-song automated batch download scripts (.bat for Windows, .sh for Mac/Linux),
- * JDownloader 2 queue list, M3U playlists, and CSV databases for 1-click complete 320kbps MP3 retrieval.
+ * Downloads playlist packages organized by folder inside a ZIP file.
+ * TAILORED FOR MOBILE WEB AND PORTABLE DEVICES:
+ * - NO .bat scripts (Windows only, useless on mobile).
+ * - NO .sh scripts (Terminal only, useless on mobile).
+ * - NO 30-second preview clips!
+ * - Includes .m3u playlists ready for mobile music players (VLC for Android/iOS, Poweramp, etc.).
+ * - Includes complete CSV and JSON metadata databases.
+ * - Includes clear mobile guide for downloading complete MP3s.
  */
 export async function downloadTracksByFolderZip(
   tracks: Track[],
-  zipFilename = 'Biblioteca_Canciones_Completas.zip',
+  zipFilename = 'Biblioteca_Canciones_Movil.zip',
   onProgress?: (current: number, total: number, statusText: string) => void
 ): Promise<{ successCount: number; failCount: number }> {
   const zip = new JSZip();
@@ -112,7 +118,6 @@ export async function downloadTracksByFolderZip(
     if (!grouped[plName]) grouped[plName] = [];
     grouped[plName].push(t);
 
-    // If marked as favorite and belongs to another playlist, ensure it's also in "Favorite Tracks"
     if (t.isFavorite && plName !== 'Favorite Tracks') {
       if (!grouped['Favorite Tracks']) grouped['Favorite Tracks'] = [];
       if (!grouped['Favorite Tracks'].some((x) => x.id === t.id)) {
@@ -121,52 +126,40 @@ export async function downloadTracksByFolderZip(
     }
   }
 
-  // 1. Root Readme instructions
-  const readmeText = `======================================================================
-DEEZER LIBRARY HUB - PAQUETE DE DESCARGA DE CANCIONES COMPLETAS
+  // 1. Mobile guide
+  const guideText = `======================================================================
+DEEZER LIBRARY HUB - PAQUETE PARA DISPOSITIVOS MÓVILES Y CELULARES
 ======================================================================
-¡IMPORTANTE!
-Se ha ELIMINADO por completo la descarga de fragmentos promocionales de 30 segundos.
-Este paquete contiene los scripts y listas automatizadas para descargar
-todas tus canciones en su duración 100% COMPLETA (3 a 5+ minutos en MP3 320kbps),
-organizadas por sus carpetas y con carátula en alta definición.
+¡CERO FRAGMENTOS DE 30 SEGUNDOS!
+Se ha eliminado por completo la descarga de vistas previas de 30s.
 
-¿CÓMO DESCARGAR LAS CANCIONES COMPLETAS?
+¿CÓMO USAR ESTE PAQUETE EN TU CELULAR (ANDROID O IPHONE)?
 
-OPCIÓN 1: AUTOMÁTICO EN WINDOWS (1 Clic - Recomendado)
-1. Extrae este archivo ZIP en cualquier carpeta de tu computadora.
-2. Abre la carpeta que desees (ej. "Favorite Tracks", "Tarea", etc.).
-3. Haz doble clic en el archivo ".bat" (ej. "Descargar_Canciones_Completas_Favorite_Tracks.bat").
-4. El script descargará automáticamente cada canción completa en MP3 a 320kbps
-   con su carátula y metadatos dentro de esa misma carpeta.
-   * Si no tienes yt-dlp instalado, en Windows se instala en segundos abriendo
-     PowerShell y ejecutando: winget install yt-dlp
+1. REPRODUCTORES DE MÚSICA EN EL CELULAR:
+- Cada carpeta contiene un archivo ".m3u" (ej. "Favorite Tracks.m3u").
+- Puedes abrirlo con reproductores móviles como:
+  * VLC for Android / VLC for iOS
+  * Poweramp Music Player
+  * Musicolet
+  * Samsung Music
+  * Reproductor de Música de tu celular
 
-OPCIÓN 2: AUTOMÁTICO EN MACOS O LINUX
-1. Extrae este archivo ZIP.
-2. Abre la Terminal en la carpeta de la lista.
-3. Ejecuta: bash Descargar_Canciones_Completas_[Nombre].sh
+2. DESCARGAR CANCIONES COMPLETAS DIRECTAMENTE A TU CELULAR:
+- Abre la app web en tu celular (o instálala como PWA desde el menú de Chrome o Safari).
+- En la pestaña "Canciones" o "Favoritas", toca el botón de descarga en cualquier canción.
+- Selecciona "Descargar MP3 Completo (1 Clic en Celular)" para guardar la canción completa
+  de 3 a 5+ minutos directamente en la carpeta de Descargas de tu teléfono.
 
-OPCIÓN 3: CON JDOWNLOADER 2 O INTERNET DOWNLOAD MANAGER (IDM)
-1. Abre JDownloader 2 o IDM.
-2. Abre el archivo "Lista_JDownloader_[Nombre].txt" que está dentro de la carpeta.
-3. Copia todo su contenido y pégalo en JDownloader para descargar todas las canciones
-   en paralelo a máxima velocidad.
-
-OPCIÓN 4: REPRODUCTORES DE AUDIO (VLC, WINAMP, FOOBAR2000, CELULAR)
-- Cada carpeta incluye su archivo ".m3u" para reproducir tu selección en orden.
+3. RESPALDO DIGITAL:
+- Incluye Biblioteca_Completa.csv y Biblioteca_Completa.json con los nombres de todas
+  tus canciones, artistas, álbumes y metadatos.
 ======================================================================`;
 
-  zip.file('LEEME_INSTRUCCIONES_DESCARGA.txt', readmeText);
+  zip.file('GUIA_USO_CELULAR.txt', guideText);
 
-  // 2. Add overall CSV
+  // 2. Add overall CSV and JSON
   zip.file('Biblioteca_Completa.csv', exportToCSV(tracks));
-
-  // 3. Add root global batch download scripts for the whole library
-  const globalScripts = generateBulkDownloadScripts(tracks, 'Biblioteca_Completa');
-  zip.file('Descargar_Toda_La_Biblioteca_Windows.bat', globalScripts.batScript);
-  zip.file('Descargar_Toda_La_Biblioteca_Mac_Linux.sh', globalScripts.shScript);
-  zip.file('Lista_JDownloader_Toda_La_Biblioteca.txt', globalScripts.jdownloaderList);
+  zip.file('Biblioteca_Completa.json', JSON.stringify(tracks, null, 2));
 
   let processed = 0;
   const folderEntries = Object.entries(grouped);
@@ -179,27 +172,23 @@ OPCIÓN 4: REPRODUCTORES DE AUDIO (VLC, WINAMP, FOOBAR2000, CELULAR)
     folder?.file(`${safeFolderName}.m3u`, generateM3U(folderTracks, safeFolderName));
     folder?.file(`${safeFolderName}.csv`, exportToCSV(folderTracks));
 
-    // Folder-specific automated full-song download scripts
-    const folderScripts = generateBulkDownloadScripts(folderTracks, safeFolderName);
-    folder?.file(`Descargar_Canciones_Completas_${safeFolderName}.bat`, folderScripts.batScript);
-    folder?.file(`Descargar_Canciones_Completas_${safeFolderName}.sh`, folderScripts.shScript);
-    folder?.file(`Lista_JDownloader_${safeFolderName}.txt`, folderScripts.jdownloaderList);
-
-    // If any track has genuine full offline audio imported (from local files), include that real full MP3
+    // If any track has genuine full offline audio imported (from local user MP3s), include that real full MP3
     for (const track of folderTracks) {
       processed++;
       onProgress?.(
         processed,
         total,
-        `[${safeFolderName}] Preparando ${track.artist} - ${track.title}`
+        `[${safeFolderName}] Preparando lista para ${track.artist} - ${track.title}`
       );
 
       try {
-        const storedBlob = await getOfflineAudioBlob(track.id);
-        if (storedBlob && storedBlob.size > 200000) {
-          const safeArtist = (track.artist || 'Artista').replace(/[/\\?%*:|"<>]/g, '_');
-          const safeTitle = (track.title || 'Cancion').replace(/[/\\?%*:|"<>]/g, '_');
-          folder?.file(`${safeArtist} - ${safeTitle}.mp3`, storedBlob);
+        if (track.type === 'Local') {
+          const storedBlob = await getOfflineAudioBlob(track.id);
+          if (storedBlob && storedBlob.size > 200000) {
+            const safeArtist = (track.artist || 'Artista').replace(/[/\\?%*:|"<>]/g, '_');
+            const safeTitle = (track.title || 'Cancion').replace(/[/\\?%*:|"<>]/g, '_');
+            folder?.file(`${safeArtist} - ${safeTitle}.mp3`, storedBlob);
+          }
         }
         successCount++;
       } catch {
@@ -208,7 +197,7 @@ OPCIÓN 4: REPRODUCTORES DE AUDIO (VLC, WINAMP, FOOBAR2000, CELULAR)
     }
   }
 
-  onProgress?.(total, total, 'Empaquetando paquete ZIP de canciones completas...');
+  onProgress?.(total, total, 'Empaquetando listas para tu celular...');
   const zipBlob = await zip.generateAsync({ type: 'blob' });
   triggerFileDownload(zipBlob, zipFilename);
 
@@ -216,109 +205,14 @@ OPCIÓN 4: REPRODUCTORES DE AUDIO (VLC, WINAMP, FOOBAR2000, CELULAR)
 }
 
 /**
- * Batch downloads multiple tracks into a single .zip file.
+ * Batch downloads multiple tracks into a mobile .zip file.
  */
 export async function downloadBatchZip(
   tracks: Track[],
-  zipFilename = 'Canciones_Completas_Deezer.zip',
+  zipFilename = 'Biblioteca_Movil_Deezer.zip',
   onProgress?: (current: number, total: number, currentTrackTitle: string) => void
 ): Promise<{ successCount: number; failCount: number }> {
   return downloadTracksByFolderZip(tracks, zipFilename, onProgress);
-}
-
-/**
- * Downloads full-song download package directly to a folder on user's computer via File System Access API.
- * Never writes 30s clips to user's disk!
- */
-export async function downloadToLocalDirectoryPicker(
-  tracks: Track[],
-  onProgress?: (current: number, total: number, statusText: string) => void
-): Promise<{ successCount: number; failCount: number } | null> {
-  if (typeof window === 'undefined' || !(window as any).showDirectoryPicker) {
-    return null; // Not supported, falls back to ZIP
-  }
-
-  try {
-    const dirHandle = await (window as any).showDirectoryPicker();
-    let successCount = 0;
-    let failCount = 0;
-    const total = tracks.length;
-
-    // Group tracks
-    const grouped: Record<string, Track[]> = {};
-    for (const t of tracks) {
-      const plName = (t.playlist || 'General').replace(/[/\\?%*:|"<>]/g, '_');
-      if (!grouped[plName]) grouped[plName] = [];
-      grouped[plName].push(t);
-    }
-
-    // Write global README
-    const readmeHandle = await dirHandle.getFileHandle('LEEME_INSTRUCCIONES_DESCARGA.txt', { create: true });
-    const readmeWritable = await readmeHandle.createWritable();
-    await readmeWritable.write(
-      'Haz doble clic en el archivo .bat dentro de cada carpeta para descargar todas las canciones completas en 320kbps MP3.'
-    );
-    await readmeWritable.close();
-
-    let processed = 0;
-
-    for (const [folderName, folderTracks] of Object.entries(grouped)) {
-      const subDirHandle = await dirHandle.getDirectoryHandle(folderName, { create: true });
-      const scripts = generateBulkDownloadScripts(folderTracks, folderName);
-
-      // Write Windows Bat
-      const batHandle = await subDirHandle.getFileHandle(`Descargar_Canciones_Completas_${folderName}.bat`, { create: true });
-      const batWritable = await batHandle.createWritable();
-      await batWritable.write(scripts.batScript);
-      await batWritable.close();
-
-      // Write Mac/Linux Sh
-      const shHandle = await subDirHandle.getFileHandle(`Descargar_Canciones_Completas_${folderName}.sh`, { create: true });
-      const shWritable = await shHandle.createWritable();
-      await shWritable.write(scripts.shScript);
-      await shWritable.close();
-
-      // Write JDownloader list
-      const jdHandle = await subDirHandle.getFileHandle(`Lista_JDownloader_${folderName}.txt`, { create: true });
-      const jdWritable = await jdHandle.createWritable();
-      await jdWritable.write(scripts.jdownloaderList);
-      await jdWritable.close();
-
-      // Write M3U
-      const m3uHandle = await subDirHandle.getFileHandle(`${folderName}.m3u`, { create: true });
-      const m3uWritable = await m3uHandle.createWritable();
-      await m3uWritable.write(generateM3U(folderTracks, folderName));
-      await m3uWritable.close();
-
-      for (const track of folderTracks) {
-        processed++;
-        onProgress?.(processed, total, `[${folderName}] ${track.artist} - ${track.title}`);
-
-        try {
-          const storedBlob = await getOfflineAudioBlob(track.id);
-          if (storedBlob && storedBlob.size > 200000) {
-            const safeArtist = (track.artist || 'Artista').replace(/[/\\?%*:|"<>]/g, '_');
-            const safeTitle = (track.title || 'Cancion').replace(/[/\\?%*:|"<>]/g, '_');
-            const fileHandle = await subDirHandle.getFileHandle(`${safeArtist} - ${safeTitle}.mp3`, { create: true });
-            const writable = await fileHandle.createWritable();
-            await writable.write(storedBlob);
-            await writable.close();
-          }
-          successCount++;
-        } catch {
-          failCount++;
-        }
-      }
-    }
-
-    return { successCount, failCount };
-  } catch (err: any) {
-    if (err.name === 'AbortError') {
-      return null;
-    }
-    console.error('Error saving download scripts to directory', err);
-    return null;
-  }
 }
 
 /**

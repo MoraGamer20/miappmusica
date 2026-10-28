@@ -200,7 +200,7 @@ export const MobileToolsView: React.FC<MobileToolsViewProps> = ({
           Exportar y Respaldar
         </h3>
         <div className="grid grid-cols-2 gap-2.5">
-          {/* Download by Folder */}
+          {/* Download by Folder for Mobile */}
           {onOpenFolderDownload && (
             <button
               type="button"
@@ -212,8 +212,8 @@ export const MobileToolsView: React.FC<MobileToolsViewProps> = ({
                   <FolderDown className="w-5 h-5" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-white">Descargar por Carpetas</h4>
-                  <p className="text-xs text-indigo-300">ZIP organizado por playlist o a disco</p>
+                  <h4 className="text-sm font-bold text-white">Descargador de Canciones para Celular</h4>
+                  <p className="text-xs text-indigo-300">Canciones completas en MP3 y playlists para tu teléfono</p>
                 </div>
               </div>
               <ChevronRight className="w-4 h-4 text-indigo-400" />

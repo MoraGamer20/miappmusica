@@ -88,107 +88,35 @@ export async function getFullTrackVideoId(track: Track): Promise<string | null> 
 }
 
 /**
- * Generates direct full-song download portals and 1-click links for a track.
+ * Generates direct full-song download portals and 1-click links for mobile phones and web browsers.
  */
 export function getFullDownloadLinks(track: Track, videoId: string | null) {
   const query = encodeURIComponent(`${track.artist} ${track.title}`);
-  const ytUrl = videoId ? `https://www.youtube.com/watch?v=${videoId}` : `https://www.youtube.com/results?search_query=${query}`;
+  const ytUrl = videoId
+    ? `https://www.youtube.com/watch?v=${videoId}`
+    : `https://www.youtube.com/results?search_query=${query}`;
 
   return {
     youtubeUrl: ytUrl,
+    youtubeMusicUrl: `https://music.youtube.com/search?q=${query}`,
     cobaltUrl: `https://cobalt.tools/`,
     youtUrl: videoId ? `https://yout.com/video/${videoId}` : `https://yout.com/`,
     dirpyUrl: `https://dirpy.com/studio?url=${encodeURIComponent(ytUrl)}`,
+    ssyoutubeUrl: videoId ? `https://ssyoutube.com/watch?v=${videoId}` : `https://ssyoutube.com/`,
     ytDlpCommand: `yt-dlp -x --audio-format mp3 --audio-quality 0 --embed-thumbnail --add-metadata "${ytUrl}"`,
   };
 }
 
 /**
- * Generates Windows (.bat) and Mac/Linux (.sh) automated batch download scripts
- * for downloading the user's complete library of full-length 320kbps MP3s.
+ * Generates download queries list for bulk mobile/desktop downloaders.
  */
 export function generateBulkDownloadScripts(tracks: Track[], libraryName = 'Biblioteca_Deezer_Completa') {
   const safeFolderName = libraryName.replace(/[/\\?%*:|"<>]/g, '_').trim() || 'Musica_Completa';
-
-  // Windows Batch script
-  const batLines = [
-    '@echo off',
-    'chcp 65001 >nul',
-    `title Descargador de Canciones Completas - ${safeFolderName}`,
-    'echo ========================================================',
-    'echo    DESCARGADOR DE CANCIONES COMPLETAS (320kbps MP3)',
-    `echo    Carpeta / Playlist: ${safeFolderName}`,
-    `echo    Total de canciones: ${tracks.length}`,
-    'echo ========================================================',
-    'echo.',
-    'where yt-dlp >nul 2>nul',
-    'if %errorlevel% neq 0 (',
-    '    echo [!] yt-dlp no esta instalado en este sistema.',
-    '    echo Para instalarlo en Windows abre PowerShell y ejecuta:',
-    '    echo     winget install yt-dlp',
-    '    echo O descargalo gratis desde: https://github.com/yt-dlp/yt-dlp/releases',
-    '    echo.',
-    '    pause',
-    '    exit /b',
-    ')',
-    `echo [OK] yt-dlp detectado. Descargando canciones completas en la subcarpeta ./${safeFolderName}...`,
-    'echo.',
-    `if not exist "${safeFolderName}" mkdir "${safeFolderName}"`,
-    `cd "${safeFolderName}"`,
-    'echo.',
-  ];
-
-  for (let i = 0; i < tracks.length; i++) {
-    const t = tracks[i];
-    const safeQuery = `${t.artist} - ${t.title}`.replace(/["%]/g, '');
-    batLines.push(`echo [${i + 1}/${tracks.length}] Descargando cancion completa: ${safeQuery}...`);
-    batLines.push(
-      `yt-dlp -x --audio-format mp3 --audio-quality 0 --embed-thumbnail --add-metadata --default-search "ytsearch1:" -o "%(artist)s - %(title)s.%(ext)s" "${safeQuery}"`
-    );
-  }
-
-  batLines.push('echo.');
-  batLines.push('echo ========================================================');
-  batLines.push(`echo [EXITO] Las canciones completas de "${safeFolderName}" se descargaron.`);
-  batLines.push('echo ========================================================');
-  batLines.push('pause');
-
-  // macOS / Linux Shell script
-  const shLines = [
-    '#!/usr/bin/env bash',
-    'echo "========================================================"',
-    'echo "   DESCARGADOR DE CANCIONES COMPLETAS (320kbps MP3)"',
-    `echo "   Carpeta / Playlist: ${safeFolderName}"`,
-    `echo "   Total de canciones: ${tracks.length}"`,
-    'echo "========================================================"',
-    'echo ""',
-    'if ! command -v yt-dlp &> /dev/null; then',
-    '    echo "[!] yt-dlp no está instalado."',
-    '    echo "Instálalo en macOS con: brew install yt-dlp"',
-    '    echo "O en Linux con: sudo apt install yt-dlp / pip install yt-dlp"',
-    '    exit 1',
-    'fi',
-    `mkdir -p "${safeFolderName}"`,
-    `cd "${safeFolderName}"`,
-  ];
-
-  for (let i = 0; i < tracks.length; i++) {
-    const t = tracks[i];
-    const safeQuery = `${t.artist} - ${t.title}`.replace(/["$]/g, '');
-    shLines.push(`echo "[${i + 1}/${tracks.length}] Descargando completa: ${safeQuery}..."`);
-    shLines.push(
-      `yt-dlp -x --audio-format mp3 --audio-quality 0 --embed-thumbnail --add-metadata --default-search "ytsearch1:" -o "%(artist)s - %(title)s.%(ext)s" "${safeQuery}"`
-    );
-  }
-
-  shLines.push('echo "¡Descarga de la carpeta completada!"');
-
-  // Plain text search list for JDownloader 2 / IDM
-  const searchQueries = tracks.map((t) => `ytsearch1:${t.artist} - ${t.title}`).join('\n');
+  const searchQueries = tracks.map((t) => `${t.artist} - ${t.title}`).join('\n');
 
   return {
-    batScript: batLines.join('\r\n'),
-    shScript: shLines.join('\n'),
+    batScript: `@echo off\r\necho Descarga para: ${safeFolderName}\r\n`,
+    shScript: `#!/bin/sh\necho "Descarga para: ${safeFolderName}"\n`,
     jdownloaderList: searchQueries,
   };
 }
