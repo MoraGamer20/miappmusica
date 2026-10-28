@@ -18,6 +18,8 @@ import {
   Moon,
   Menu,
   ChevronRight,
+  FolderDown,
+  HardDrive,
 } from 'lucide-react';
 import { PWAInstallButton } from './PWAInstallButton';
 
@@ -37,6 +39,7 @@ interface NavbarProps {
   onImportCSVFile: (file: File) => void;
   activePlaylist: string;
   onOpenBulkDownloadModal: () => void;
+  onOpenFolderDownloadModal?: () => void;
   onOpenVercelGuide?: () => void;
   onOpenKeyboardShortcuts?: () => void;
   onOpenEqualizer?: () => void;
@@ -61,6 +64,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onImportCSVFile,
   activePlaylist,
   onOpenBulkDownloadModal,
+  onOpenFolderDownloadModal,
   onOpenVercelGuide,
   onOpenKeyboardShortcuts,
   onOpenEqualizer,
@@ -159,6 +163,19 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Desktop Action Buttons (sm and up) */}
           <div className="hidden sm:flex items-center gap-2 shrink-0">
+            {/* Download by Folder Button */}
+            {onOpenFolderDownloadModal && (
+              <button
+                type="button"
+                onClick={onOpenFolderDownloadModal}
+                className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600/20 text-indigo-300 border border-indigo-500/40 hover:bg-indigo-600/30 transition-all shadow-sm"
+                title="Descargar canciones organizadas por carpetas de cada playlist"
+              >
+                <FolderDown className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Por Carpetas</span>
+              </button>
+            )}
+
             {/* Bulk Download Full Songs Button */}
             <button
               type="button"
@@ -236,6 +253,23 @@ export const Navbar: React.FC<NavbarProps> = ({
                         Descargas & Exportación
                       </p>
                     </div>
+
+                    {onOpenFolderDownloadModal && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onOpenFolderDownloadModal();
+                          setShowExportMenu(false);
+                        }}
+                        className="w-full text-left px-3.5 py-2 text-xs text-indigo-300 hover:bg-indigo-950/40 flex items-center gap-2.5 transition-colors border-b border-slate-700/60"
+                      >
+                        <FolderDown className="w-4 h-4 text-indigo-400 shrink-0" />
+                        <div>
+                          <p className="font-bold text-white">Descargar por Carpetas</p>
+                          <p className="text-[10px] text-indigo-300/90">ZIP con subcarpetas o disco PC</p>
+                        </div>
+                      </button>
+                    )}
 
                     <button
                       type="button"
@@ -492,6 +526,26 @@ export const Navbar: React.FC<NavbarProps> = ({
 
             {/* Bulk Download Entire DB */}
             <div className="pt-2 border-t border-slate-800 space-y-2">
+              {onOpenFolderDownloadModal && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowMobileMenu(false);
+                    onOpenFolderDownloadModal();
+                  }}
+                  className="w-full flex items-center justify-between p-3 rounded-xl bg-indigo-950/40 border border-indigo-500/40 text-left text-xs font-semibold text-indigo-300 hover:bg-indigo-900/40"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <FolderDown className="w-4 h-4 text-indigo-400 shrink-0" />
+                    <div>
+                      <p className="text-white font-bold">Descargar por Carpetas</p>
+                      <p className="text-[10px] text-indigo-300">ZIP organizado por playlist o a disco</p>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-indigo-400" />
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={() => {

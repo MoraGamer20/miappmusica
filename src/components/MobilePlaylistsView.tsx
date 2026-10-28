@@ -10,6 +10,7 @@ import {
   Sparkles,
   ChevronRight,
   Disc,
+  HardDrive,
 } from 'lucide-react';
 import { isFavoritesPlaylist } from '../App';
 
@@ -23,6 +24,7 @@ interface MobilePlaylistsViewProps {
   selectedArtist: string | null;
   onSelectArtist: (artist: string | null) => void;
   totalTracks: number;
+  offlineCount?: number;
   onNavigateToTracks: () => void;
   onPlayPlaylist?: (playlistName: string) => void;
 }
@@ -37,6 +39,7 @@ export const MobilePlaylistsView: React.FC<MobilePlaylistsViewProps> = ({
   selectedArtist,
   onSelectArtist,
   totalTracks,
+  offlineCount = 0,
   onNavigateToTracks,
 }) => {
   const [isCreating, setIsCreating] = useState(false);
@@ -127,50 +130,73 @@ export const MobilePlaylistsView: React.FC<MobilePlaylistsViewProps> = ({
       )}
 
       {/* Featured Primary Cards */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-3 gap-2 sm:gap-3">
         {/* Todas las Canciones Card */}
         <div
           onClick={() => handlePickPlaylist('ALL')}
-          className={`cursor-pointer rounded-2xl p-4 border transition-all active:scale-98 flex flex-col justify-between h-32 relative overflow-hidden shadow-lg ${
+          className={`cursor-pointer rounded-2xl p-3 sm:p-4 border transition-all active:scale-98 flex flex-col justify-between h-28 sm:h-32 relative overflow-hidden shadow-lg ${
             activePlaylist === 'ALL' && !selectedArtist
               ? 'bg-gradient-to-br from-purple-900/80 to-indigo-950 border-purple-400/80 ring-2 ring-purple-500/40'
               : 'bg-slate-900/90 border-slate-800 hover:border-slate-700'
           }`}
         >
           <div className="flex items-center justify-between">
-            <div className="w-10 h-10 rounded-xl bg-purple-600/30 text-purple-300 flex items-center justify-center border border-purple-500/30">
-              <Music2 className="w-5 h-5 text-purple-400" />
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-purple-600/30 text-purple-300 flex items-center justify-center border border-purple-500/30">
+              <Music2 className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400" />
             </div>
-            <span className="text-xs font-bold text-slate-300 bg-slate-800/80 px-2 py-0.5 rounded-full">
+            <span className="text-[11px] sm:text-xs font-bold text-slate-300 bg-slate-800/80 px-1.5 py-0.5 rounded-full">
               {totalTracks}
             </span>
           </div>
           <div>
-            <h3 className="font-bold text-base text-white">Todas</h3>
-            <p className="text-xs text-slate-400">Toda tu biblioteca</p>
+            <h3 className="font-bold text-sm sm:text-base text-white">Todas</h3>
+            <p className="text-[10px] sm:text-xs text-slate-400 truncate">Biblioteca</p>
           </div>
         </div>
 
         {/* Favoritas Card */}
         <div
           onClick={() => handlePickPlaylist('Favorite Tracks')}
-          className={`cursor-pointer rounded-2xl p-4 border transition-all active:scale-98 flex flex-col justify-between h-32 relative overflow-hidden shadow-lg ${
+          className={`cursor-pointer rounded-2xl p-3 sm:p-4 border transition-all active:scale-98 flex flex-col justify-between h-28 sm:h-32 relative overflow-hidden shadow-lg ${
             isFavoritesPlaylist(activePlaylist) && !selectedArtist
               ? 'bg-gradient-to-br from-rose-950/80 to-pink-950 border-rose-400/80 ring-2 ring-rose-500/40'
               : 'bg-slate-900/90 border-slate-800 hover:border-slate-700'
           }`}
         >
           <div className="flex items-center justify-between">
-            <div className="w-10 h-10 rounded-xl bg-rose-600/30 text-rose-300 flex items-center justify-center border border-rose-500/30">
-              <Heart className="w-5 h-5 text-rose-400 fill-rose-400" />
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-rose-600/30 text-rose-300 flex items-center justify-center border border-rose-500/30">
+              <Heart className="w-4 h-4 sm:w-5 sm:h-5 text-rose-400 fill-rose-400" />
             </div>
-            <span className="text-xs font-bold text-slate-300 bg-slate-800/80 px-2 py-0.5 rounded-full">
+            <span className="text-[11px] sm:text-xs font-bold text-slate-300 bg-slate-800/80 px-1.5 py-0.5 rounded-full">
               {favoritesItem?.count || 0}
             </span>
           </div>
           <div>
-            <h3 className="font-bold text-base text-white">Favoritas</h3>
-            <p className="text-xs text-slate-400">Con corazón ❤️</p>
+            <h3 className="font-bold text-sm sm:text-base text-white">Favoritas</h3>
+            <p className="text-[10px] sm:text-xs text-slate-400 truncate">Con ❤️</p>
+          </div>
+        </div>
+
+        {/* Descargadas / Offline Card */}
+        <div
+          onClick={() => handlePickPlaylist('OFFLINE')}
+          className={`cursor-pointer rounded-2xl p-3 sm:p-4 border transition-all active:scale-98 flex flex-col justify-between h-28 sm:h-32 relative overflow-hidden shadow-lg ${
+            activePlaylist === 'OFFLINE' && !selectedArtist
+              ? 'bg-gradient-to-br from-emerald-950/80 to-teal-950 border-emerald-400/80 ring-2 ring-emerald-500/40'
+              : 'bg-slate-900/90 border-slate-800 hover:border-slate-700'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-emerald-600/30 text-emerald-300 flex items-center justify-center border border-emerald-500/30">
+              <HardDrive className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400" />
+            </div>
+            <span className="text-[11px] sm:text-xs font-bold text-emerald-300 bg-emerald-950/80 px-1.5 py-0.5 rounded-full">
+              {offlineCount}
+            </span>
+          </div>
+          <div>
+            <h3 className="font-bold text-sm sm:text-base text-white">Offline</h3>
+            <p className="text-[10px] sm:text-xs text-emerald-400/80 truncate">Sin internet</p>
           </div>
         </div>
       </div>

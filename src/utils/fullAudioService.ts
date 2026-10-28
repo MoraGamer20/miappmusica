@@ -98,8 +98,7 @@ export function getFullDownloadLinks(track: Track, videoId: string | null) {
     youtubeUrl: ytUrl,
     cobaltUrl: `https://cobalt.tools/`,
     youtUrl: videoId ? `https://yout.com/video/${videoId}` : `https://yout.com/`,
-    y2mateUrl: videoId ? `https://www.y2mate.com/youtube/${videoId}` : `https://www.y2mate.com/`,
-    ytdownloaderUrl: videoId ? `https://loader.to/?link=${encodeURIComponent(ytUrl)}&f=mp3` : `https://loader.to/`,
+    dirpyUrl: `https://dirpy.com/studio?url=${encodeURIComponent(ytUrl)}`,
     ytDlpCommand: `yt-dlp -x --audio-format mp3 --audio-quality 0 --embed-thumbnail --add-metadata "${ytUrl}"`,
   };
 }

@@ -23,6 +23,8 @@ import { EditTrackModal } from './components/EditTrackModal';
 import { YouTubeAudioEmbed } from './components/YouTubeAudioEmbed';
 import { FullTrackDownloadModal } from './components/FullTrackDownloadModal';
 import { BulkLibraryDownloadModal } from './components/BulkLibraryDownloadModal';
+import { FolderDownloadModal } from './components/FolderDownloadModal';
+import { SongDiscoveryModal } from './components/SongDiscoveryModal';
 import { VercelDeployModal } from './components/VercelDeployModal';
 import { LyricsModal } from './components/LyricsModal';
 import { EqualizerModal } from './components/EqualizerModal';
@@ -33,8 +35,10 @@ import { MobilePlaylistsView } from './components/MobilePlaylistsView';
 import { MobileArtistsView } from './components/MobileArtistsView';
 import { MobileToolsView } from './components/MobileToolsView';
 import { equalizer } from './utils/equalizerService';
+import { updateMediaSession, updateMediaSessionPosition } from './utils/mediaSessionManager';
+import { getAllOfflineTrackIds, getOfflineAudioUrl, importLocalAudioFiles } from './utils/offlineAudioStorage';
 import defaultCsvRaw from '../public/assets/aistudio/My_Deezer_Library_e6092c00.csv?raw';
-import { Heart, Play, Shuffle, Sliders, Download, Sparkles, ListMusic, Users, Clock, RotateCcw, X, Music } from 'lucide-react';
+import { Heart, Play, Shuffle, Sliders, Download, Sparkles, ListMusic, Users, Clock, RotateCcw, X, Music, HardDrive, FolderDown, Upload } from 'lucide-react';
 
 const STORAGE_KEY = 'deezer_library_tracks_v4_authentic';
 const CUSTOM_PLAYLISTS_KEY = 'deezer_custom_playlists_v2';
@@ -106,6 +110,10 @@ export default function App() {
 
   // Modals state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isDiscoveryModalOpen, setIsDiscoveryModalOpen] = useState(false);
+  const [isFolderDownloadOpen, setIsFolderDownloadOpen] = useState(false);
+  const [offlineTrackIds, setOfflineTrackIds] = useState<Set<string>>(new Set());
+  const localAudioInputRef = useRef<HTMLInputElement | null>(null);
   const [searchModalInitialQuery, setSearchModalInitialQuery] = useState('');
   const [isStatsModalOpen, setIsStatsModalOpen] = useState(false);
   const [isFullPlayerOpen, setIsFullPlayerOpen] = useState(false);
@@ -155,9 +163,17 @@ export default function App() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const synthStopRef = useRef<(() => void) | null>(null);
 
-  // 1. Initial Load: Read CSV or LocalStorage
+  // 1. Initial Load: Read CSV or LocalStorage & Offline tracks
   useEffect(() => {
     initTrackCache();
+    initVideoIdCache();
+
+    // Query all locally cached offline audio files
+    getAllOfflineTrackIds()
+      .then((ids) => {
+        setOfflineTrackIds(ids);
+      })
+      .catch(() => {});
 
     try {
       const savedCustom = localStorage.getItem(CUSTOM_PLAYLISTS_KEY);
@@ -201,6 +217,27 @@ export default function App() {
       console.warn('LocalStorage limit reached when saving library', err);
     }
   }, []);
+
+  // Import local user audio files (.mp3, .m4a, .wav) directly into the app
+  const handleImportLocalAudioFiles = async (fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0) return;
+    try {
+      const imported = await importLocalAudioFiles(fileList);
+      if (imported.length > 0) {
+        const next = [...imported, ...tracks];
+        updateTracks(next);
+        const newIds = await getAllOfflineTrackIds();
+        setOfflineTrackIds(newIds);
+        setActivePlaylist('OFFLINE');
+        showToast(`¡${imported.length} canciones importadas a tu biblioteca y listas para reproducir offline! 💾`);
+      } else {
+        showToast('No se encontraron archivos de audio compatibles (.mp3, .m4a, .wav, .flac)');
+      }
+    } catch (err) {
+      console.error('Error importing local audio', err);
+      showToast('Error al importar archivos locales');
+    }
+  };
 
   // Save custom playlists
   const handleCreatePlaylist = (name: string) => {
@@ -252,7 +289,33 @@ export default function App() {
         return next;
       });
 
-      // Fetch cover art & details
+      // 0. CHECK OFFLINE STORAGE FIRST (Direct in-app playback without internet!)
+      const offlineBlobUrl = await getOfflineAudioUrl(track.id);
+      if (offlineBlobUrl) {
+        setActiveVideoId(null);
+        if (!audioRef.current) {
+          const newAud = new Audio();
+          newAud.crossOrigin = 'anonymous';
+          audioRef.current = newAud;
+          equalizer.attachAudioElement(newAud);
+        } else if (!audioRef.current.crossOrigin) {
+          audioRef.current.crossOrigin = 'anonymous';
+        }
+        equalizer.resume();
+        const audio = audioRef.current;
+        audio.src = offlineBlobUrl;
+        audio.volume = isMuted ? 0 : volume;
+        setDuration(track.duration || 180);
+        try {
+          await audio.play();
+          setIsPlaying(true);
+          return;
+        } catch (e) {
+          console.warn('Offline playback error, falling through', e);
+        }
+      }
+
+      // Fetch cover art & details if missing
       let previewUrl = track.previewUrl;
       let coverUrl = track.coverUrl;
       let songDuration = track.duration || 210;
@@ -935,7 +998,11 @@ export default function App() {
 
     // Filter by Playlist
     if (activePlaylist !== 'ALL') {
-      if (isFavoritesPlaylist(activePlaylist)) {
+      if (activePlaylist === 'OFFLINE') {
+        result = result.filter(
+          (t) => offlineTrackIds.has(t.id) || Boolean(t.isOfflineAvailable)
+        );
+      } else if (isFavoritesPlaylist(activePlaylist)) {
         result = result.filter((t) => Boolean(t.isFavorite));
       } else {
         result = result.filter((t) => (t.playlist || '').toLowerCase() === activePlaylist.toLowerCase());
@@ -963,7 +1030,7 @@ export default function App() {
     }
 
     return result;
-  }, [tracks, activePlaylist, selectedArtist, searchQuery]);
+  }, [tracks, activePlaylist, selectedArtist, searchQuery, offlineTrackIds]);
 
   // All authentic favorite tracks
   const favoriteTracks = useMemo(() => {
@@ -981,10 +1048,7 @@ export default function App() {
         totalTracks={tracks.length}
         filteredCount={filteredTracks.length}
         uniqueArtistsCount={stats.uniqueArtists}
-        onOpenAddModal={() => {
-          setSearchModalInitialQuery('');
-          setIsAddModalOpen(true);
-        }}
+        onOpenAddModal={() => setIsDiscoveryModalOpen(true)}
         onOpenStatsModal={() => setIsStatsModalOpen(true)}
         onOpenDuplicatesModal={handleDeduplicate}
         duplicateCount={stats.duplicateCount}
@@ -994,6 +1058,7 @@ export default function App() {
         onImportCSVFile={handleImportCSVFile}
         activePlaylist={activePlaylist}
         onOpenBulkDownloadModal={() => setIsBulkDownloadOpen(true)}
+        onOpenFolderDownloadModal={() => setIsFolderDownloadOpen(true)}
         onOpenVercelGuide={() => setIsVercelModalOpen(true)}
         onOpenKeyboardShortcuts={() => setIsShortcutsOpen(true)}
         onOpenEqualizer={() => setIsEqualizerOpen(true)}
@@ -1015,10 +1080,10 @@ export default function App() {
           selectedArtist={selectedArtist}
           onSelectArtist={setSelectedArtist}
           totalTracks={tracks.length}
-          onOpenAddModal={() => {
-            setSearchModalInitialQuery('');
-            setIsAddModalOpen(true);
-          }}
+          offlineCount={tracks.filter((t) => offlineTrackIds.has(t.id) || t.isOfflineAvailable).length}
+          onOpenAddModal={() => setIsDiscoveryModalOpen(true)}
+          onOpenFolderDownloadModal={() => setIsFolderDownloadOpen(true)}
+          onImportLocalAudio={() => localAudioInputRef.current?.click()}
           onOpenVercelGuide={() => setIsVercelModalOpen(true)}
           onOpenLyrics={() => setIsLyricsOpen(true)}
           onOpenEqualizer={() => setIsEqualizerOpen(true)}
@@ -1172,8 +1237,9 @@ export default function App() {
                 onOpenDownloadModal={(track) => setDownloadModalTrack(track)}
                 onOpenSearchModal={(query) => {
                   setSearchModalInitialQuery(query || '');
-                  setIsAddModalOpen(true);
+                  setIsDiscoveryModalOpen(true);
                 }}
+                offlineTrackIds={offlineTrackIds}
               />
             </div>
           )}
@@ -1189,6 +1255,7 @@ export default function App() {
               selectedArtist={selectedArtist}
               onSelectArtist={setSelectedArtist}
               totalTracks={tracks.length}
+              offlineCount={tracks.filter((t) => offlineTrackIds.has(t.id) || t.isOfflineAvailable).length}
               onNavigateToTracks={() => setMobileTab('tracks')}
             />
           )}
@@ -1262,8 +1329,9 @@ export default function App() {
                 onOpenDownloadModal={(track) => setDownloadModalTrack(track)}
                 onOpenSearchModal={(query) => {
                   setSearchModalInitialQuery(query || '');
-                  setIsAddModalOpen(true);
+                  setIsDiscoveryModalOpen(true);
                 }}
+                offlineTrackIds={offlineTrackIds}
               />
             </div>
           )}
@@ -1277,6 +1345,7 @@ export default function App() {
               onOpenStats={() => setIsStatsModalOpen(true)}
               onOpenDuplicates={handleDeduplicate}
               onOpenBulkDownload={() => setIsBulkDownloadOpen(true)}
+              onOpenFolderDownload={() => setIsFolderDownloadOpen(true)}
               onOpenEqualizer={() => setIsEqualizerOpen(true)}
               onOpenLyrics={() => setIsLyricsOpen(true)}
               onOpenSleepTimer={() => setIsSleepTimerOpen(true)}
@@ -1313,8 +1382,9 @@ export default function App() {
             onOpenDownloadModal={(track) => setDownloadModalTrack(track)}
             onOpenSearchModal={(query) => {
               setSearchModalInitialQuery(query || '');
-              setIsAddModalOpen(true);
+              setIsDiscoveryModalOpen(true);
             }}
+            offlineTrackIds={offlineTrackIds}
           />
         </div>
       </div>
@@ -1466,6 +1536,45 @@ export default function App() {
         onClose={() => setDownloadModalTrack(null)}
         track={downloadModalTrack}
         onOpenBulkDownloadModal={() => setIsBulkDownloadOpen(true)}
+        onTrackSavedOffline={(trackId) => {
+          setOfflineTrackIds((prev) => new Set([...prev, trackId]));
+          showToast('Canción guardada en el reproductor para escuchar sin conexión 💾');
+        }}
+      />
+
+      {/* Folder Download Modal (Structured ZIP with playlist subfolders or direct to PC disk) */}
+      <FolderDownloadModal
+        isOpen={isFolderDownloadOpen}
+        onClose={() => setIsFolderDownloadOpen(false)}
+        tracks={tracks}
+        availablePlaylists={availablePlaylistNames}
+      />
+
+      {/* Song Discovery & Web Add Modal */}
+      <SongDiscoveryModal
+        isOpen={isDiscoveryModalOpen}
+        onClose={() => setIsDiscoveryModalOpen(false)}
+        onAddTrackToPlaylist={(trackData, playlistName) => {
+          handleAddTrack({ ...trackData, playlist: playlistName });
+          showToast(`"${trackData.title}" agregada a ${playlistName}`);
+        }}
+        availablePlaylists={availablePlaylistNames}
+        onCreatePlaylist={handleCreatePlaylist}
+        onPlayTrackDirect={(track) => playTrackDirect(track)}
+        onOpenDownloadModal={(track) => setDownloadModalTrack(track)}
+      />
+
+      {/* Hidden File Input for Importing Local Audio (.mp3, .m4a, .wav) */}
+      <input
+        type="file"
+        ref={localAudioInputRef}
+        multiple
+        accept="audio/*,.mp3,.m4a,.wav,.flac,.ogg,.aac"
+        className="hidden"
+        onChange={(e) => {
+          handleImportLocalAudioFiles(e.target.files);
+          e.target.value = '';
+        }}
       />
 
       {/* Bulk Library Download Modal */}

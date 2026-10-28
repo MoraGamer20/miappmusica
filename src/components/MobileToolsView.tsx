@@ -13,6 +13,7 @@ import {
   Music2,
   Heart,
   CheckCircle2,
+  FolderDown,
 } from 'lucide-react';
 import { PWAInstallButton } from './PWAInstallButton';
 
@@ -24,6 +25,7 @@ interface MobileToolsViewProps {
   onOpenStats: () => void;
   onOpenDuplicates: () => void;
   onOpenBulkDownload: () => void;
+  onOpenFolderDownload?: () => void;
   onOpenEqualizer: () => void;
   onOpenLyrics: () => void;
   onOpenSleepTimer: () => void;
@@ -44,6 +46,7 @@ export const MobileToolsView: React.FC<MobileToolsViewProps> = ({
   onOpenStats,
   onOpenDuplicates,
   onOpenBulkDownload,
+  onOpenFolderDownload,
   onOpenEqualizer,
   onOpenLyrics,
   onOpenSleepTimer,
@@ -197,6 +200,26 @@ export const MobileToolsView: React.FC<MobileToolsViewProps> = ({
           Exportar y Respaldar
         </h3>
         <div className="grid grid-cols-2 gap-2.5">
+          {/* Download by Folder */}
+          {onOpenFolderDownload && (
+            <button
+              type="button"
+              onClick={onOpenFolderDownload}
+              className="col-span-2 flex items-center justify-between p-3.5 rounded-2xl bg-gradient-to-r from-indigo-950/70 to-purple-950/70 border border-indigo-500/40 active:scale-98 transition-all text-left shadow-md"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center border border-indigo-500/30">
+                  <FolderDown className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-white">Descargar por Carpetas</h4>
+                  <p className="text-xs text-indigo-300">ZIP organizado por playlist o a disco</p>
+                </div>
+              </div>
+              <ChevronRight className="w-4 h-4 text-indigo-400" />
+            </button>
+          )}
+
           {/* Export CSV */}
           <button
             type="button"

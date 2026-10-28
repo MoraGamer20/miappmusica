@@ -1,24 +1,20 @@
+// Vercel Serverless Function for resolving full audio YouTube links
 export default async function handler(req, res) {
-  // CORS configuration
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
-  res.setHeader(
-    'Access-Control-Allow-Headers',
-    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
-  );
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
+    return res.status(200).end();
+  }
+
+  const query = req.query.q;
+  if (!query) {
+    return res.status(400).json({ error: 'Missing query parameter q' });
   }
 
   try {
-    const query = req.query?.q || (new URL(req.url, 'http://localhost')).searchParams.get('q');
-    if (!query) {
-      return res.status(400).json({ error: 'Missing query parameter q' });
-    }
-
     const response = await fetch(
       `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`,
       {
@@ -33,12 +29,12 @@ export default async function handler(req, res) {
     const match = text.match(/"videoId":"([a-zA-Z0-9_-]{11})"/);
     const videoId = match ? match[1] : null;
 
-    res.status(200).json({
+    return res.status(200).json({
       videoId,
       query,
       youtubeUrl: videoId ? `https://www.youtube.com/watch?v=${videoId}` : null,
     });
   } catch (err) {
-    res.status(500).json({ error: String(err?.message || err) });
+    return res.status(500).json({ error: String(err?.message || err) });
   }
 }

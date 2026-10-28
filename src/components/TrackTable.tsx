@@ -23,6 +23,7 @@ import {
   Share2,
   Edit,
   Sparkles,
+  HardDrive,
 } from 'lucide-react';
 import { Track, SortField, SortOrder } from '../types/music';
 import { getStreamingLinks } from '../utils/downloadHelper';
@@ -46,6 +47,7 @@ interface TrackTableProps {
   searchQuery: string;
   onOpenDownloadModal: (track: Track) => void;
   onOpenSearchModal?: (query?: string) => void;
+  offlineTrackIds?: Set<string>;
 }
 
 export const TrackTable: React.FC<TrackTableProps> = ({
@@ -67,6 +69,7 @@ export const TrackTable: React.FC<TrackTableProps> = ({
   searchQuery,
   onOpenDownloadModal,
   onOpenSearchModal,
+  offlineTrackIds,
 }) => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
@@ -478,13 +481,20 @@ export const TrackTable: React.FC<TrackTableProps> = ({
                 }}
                 className="flex-1 min-w-0 px-3 cursor-pointer"
               >
-                <p
-                  className={`text-sm font-semibold truncate ${
-                    isCurrent ? 'text-purple-400 font-bold' : 'text-slate-100'
-                  }`}
-                >
-                  {track.title}
-                </p>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <p
+                    className={`text-sm font-semibold truncate ${
+                      isCurrent ? 'text-purple-400 font-bold' : 'text-slate-100'
+                    }`}
+                  >
+                    {track.title}
+                  </p>
+                  {(offlineTrackIds?.has(track.id) || track.isOfflineAvailable) && (
+                    <span title="Audio descargado / En disco" className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-1 py-0.2 rounded shrink-0">
+                      Offline
+                    </span>
+                  )}
+                </div>
                 <div className="flex items-center gap-1.5 text-xs text-slate-400 truncate mt-0.5">
                   <span className="truncate">{track.artist}</span>
                   {track.album && (
@@ -692,13 +702,20 @@ export const TrackTable: React.FC<TrackTableProps> = ({
                       </div>
 
                       <div className="min-w-0">
-                        <p
-                          className={`font-semibold truncate ${
-                            isCurrent ? 'text-purple-400 font-bold' : 'text-slate-100'
-                          }`}
-                        >
-                          {track.title}
-                        </p>
+                        <div className="flex items-center gap-1.5">
+                          <p
+                            className={`font-semibold truncate ${
+                              isCurrent ? 'text-purple-400 font-bold' : 'text-slate-100'
+                            }`}
+                          >
+                            {track.title}
+                          </p>
+                          {(offlineTrackIds?.has(track.id) || track.isOfflineAvailable) && (
+                            <span title="Audio descargado / En disco" className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-1 py-0.2 rounded shrink-0">
+                              Offline
+                            </span>
+                          )}
+                        </div>
                         <p className="text-[11px] text-slate-400 truncate md:hidden">
                           {track.artist}
                         </p>

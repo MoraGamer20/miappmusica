@@ -1,14 +1,16 @@
 {
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist",
-  "installCommand": "npm install --legacy-peer-deps",
+  "version": 2,
   "rewrites": [
     {
-      "source": "/api/deezer/:path*",
-      "destination": "https://api.deezer.com/:path*"
+      "source": "/api/deezer/:match*",
+      "destination": "https://api.deezer.com/:match*"
     },
     {
-      "source": "/((?!api/).*)",
+      "source": "/api/full-audio/search",
+      "destination": "/api/full-audio/search"
+    },
+    {
+      "source": "/(.*)",
       "destination": "/index.html"
     }
   ]

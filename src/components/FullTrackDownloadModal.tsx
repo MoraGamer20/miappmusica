@@ -12,16 +12,20 @@ import {
   Disc,
   Clock,
   Sparkles,
+  HardDrive,
+  CheckCircle2,
 } from 'lucide-react';
 import { Track } from '../types/music';
 import { getFullTrackVideoId, getFullDownloadLinks } from '../utils/fullAudioService';
 import { downloadTrackAudio } from '../utils/downloadHelper';
+import { saveOfflineAudio, isTrackOffline } from '../utils/offlineAudioStorage';
 
 interface FullTrackDownloadModalProps {
   isOpen: boolean;
   onClose: () => void;
   track: Track | null;
   onOpenBulkDownloadModal?: () => void;
+  onTrackSavedOffline?: (trackId: string) => void;
 }
 
 export const FullTrackDownloadModal: React.FC<FullTrackDownloadModalProps> = ({
@@ -29,11 +33,14 @@ export const FullTrackDownloadModal: React.FC<FullTrackDownloadModalProps> = ({
   onClose,
   track,
   onOpenBulkDownloadModal,
+  onTrackSavedOffline,
 }) => {
   const [videoId, setVideoId] = useState<string | null>(null);
   const [isLoadingVideoId, setIsLoadingVideoId] = useState(false);
   const [copiedCommand, setCopiedCommand] = useState(false);
   const [isDownloadingPreview, setIsDownloadingPreview] = useState(false);
+  const [isSavingOffline, setIsSavingOffline] = useState(false);
+  const [isAlreadyOffline, setIsAlreadyOffline] = useState(false);
 
   useEffect(() => {
     if (track && isOpen) {
@@ -41,6 +48,9 @@ export const FullTrackDownloadModal: React.FC<FullTrackDownloadModalProps> = ({
       getFullTrackVideoId(track).then((id) => {
         setVideoId(id);
         setIsLoadingVideoId(false);
+      });
+      isTrackOffline(track.id).then((saved) => {
+        setIsAlreadyOffline(saved);
       });
     }
   }, [track, isOpen]);
@@ -61,6 +71,31 @@ export const FullTrackDownloadModal: React.FC<FullTrackDownloadModalProps> = ({
     setIsDownloadingPreview(false);
   };
 
+  const handleSaveToOffline = async () => {
+    if (!track.previewUrl && !track.deezerId) return;
+    setIsSavingOffline(true);
+    try {
+      let audioBlob: Blob | null = null;
+      if (track.previewUrl) {
+        const res = await fetch(track.previewUrl);
+        if (res.ok) {
+          audioBlob = await res.blob();
+        }
+      }
+      if (audioBlob) {
+        await saveOfflineAudio(track, audioBlob);
+        setIsAlreadyOffline(true);
+        if (onTrackSavedOffline) {
+          onTrackSavedOffline(track.id);
+        }
+      }
+    } catch (err) {
+      console.warn('Error saving offline audio', err);
+    } finally {
+      setIsSavingOffline(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-150">
       <div className="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-7 shadow-2xl text-slate-100 flex flex-col max-h-[92vh] overflow-y-auto">
@@ -72,7 +107,7 @@ export const FullTrackDownloadModal: React.FC<FullTrackDownloadModalProps> = ({
             </div>
             <div>
               <h3 className="text-base font-bold text-white">Descargar Canción</h3>
-              <p className="text-xs text-slate-400">Canción Completa o Vista Previa MP3</p>
+              <p className="text-xs text-slate-400">Canción Completa o Modo Offline</p>
             </div>
           </div>
           <button
@@ -103,6 +138,43 @@ export const FullTrackDownloadModal: React.FC<FullTrackDownloadModalProps> = ({
           </div>
         </div>
 
+        {/* In-App Offline Playback Storage Button */}
+        <div className="mb-4 p-3.5 rounded-2xl bg-gradient-to-r from-emerald-950/40 to-slate-900 border border-emerald-500/30 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+              <HardDrive className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-white">Reproducción Offline en la App</p>
+              <p className="text-[10px] text-slate-400">Guarda en memoria para escuchar sin internet</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleSaveToOffline}
+            disabled={isSavingOffline || isAlreadyOffline}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+              isAlreadyOffline
+                ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/40'
+                : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-md'
+            }`}
+          >
+            {isAlreadyOffline ? (
+              <>
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                <span>En Disco</span>
+              </>
+            ) : isSavingOffline ? (
+              <span>Guardando...</span>
+            ) : (
+              <>
+                <Download className="w-3.5 h-3.5" />
+                <span>Guardar Offline</span>
+              </>
+            )}
+          </button>
+        </div>
+
         {/* SECTION 1: Full Song Download Options */}
         <div className="space-y-3">
           <div className="flex items-center gap-2">
@@ -131,16 +203,16 @@ export const FullTrackDownloadModal: React.FC<FullTrackDownloadModalProps> = ({
             </a>
 
             <a
-              href={links.y2mateUrl}
+              href={links.cobaltUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center justify-between p-3 rounded-xl bg-slate-800 hover:bg-slate-750 border border-slate-700 text-slate-200 transition-colors group"
             >
               <div className="flex items-center gap-2.5">
-                <Download className="w-4 h-4 text-blue-400" />
+                <Sparkles className="w-4 h-4 text-purple-400" />
                 <div>
-                  <p className="text-xs font-bold text-white group-hover:text-blue-300">Descargador Y2Mate</p>
-                  <p className="text-[10px] text-slate-400">MP3 320kbps / 192kbps</p>
+                  <p className="text-xs font-bold text-white group-hover:text-purple-300">Cobalt.tools (Sin anuncios)</p>
+                  <p className="text-[10px] text-slate-400">Descarga directa en alta fidelidad</p>
                 </div>
               </div>
               <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
@@ -170,7 +242,7 @@ export const FullTrackDownloadModal: React.FC<FullTrackDownloadModalProps> = ({
         </div>
 
         {/* SECTION 2: 30s Deezer Preview */}
-        <div className="mt-5 pt-4 border-t border-slate-800">
+        <div className="mt-4 pt-3.5 border-t border-slate-800">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
               <Clock className="w-3.5 h-3.5 text-purple-400" />
@@ -193,7 +265,7 @@ export const FullTrackDownloadModal: React.FC<FullTrackDownloadModalProps> = ({
 
         {/* SECTION 3: Bulk Library Downloader */}
         {onOpenBulkDownloadModal && (
-          <div className="mt-5 pt-4 border-t border-slate-800 bg-purple-950/20 -mx-6 -mb-6 p-6 rounded-b-3xl border-t-purple-500/20">
+          <div className="mt-4 pt-3.5 border-t border-slate-800 bg-purple-950/20 -mx-6 -mb-6 p-6 rounded-b-3xl border-t-purple-500/20">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-bold text-purple-300">¿Quieres descargar toda tu biblioteca en canciones completas?</p>

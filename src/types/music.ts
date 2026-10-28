@@ -12,6 +12,7 @@ export interface Track {
   albumCover?: string;
   duration?: number;
   isFavorite?: boolean;
+  isOfflineAvailable?: boolean;
   notes?: string;
   addedAt?: number;
   videoId?: string;
