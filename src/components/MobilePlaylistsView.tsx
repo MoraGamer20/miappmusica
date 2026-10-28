@@ -11,7 +11,10 @@ import {
   ChevronRight,
   Disc,
   HardDrive,
+  FileArchive,
+  Download,
 } from 'lucide-react';
+import { Track } from '../types/music';
 import { isFavoritesPlaylist } from '../App';
 
 interface MobilePlaylistsViewProps {
@@ -27,6 +30,10 @@ interface MobilePlaylistsViewProps {
   offlineCount?: number;
   onNavigateToTracks: () => void;
   onPlayPlaylist?: (playlistName: string) => void;
+  offlinePlaylists?: Record<string, boolean>;
+  onToggleFolderOffline?: (folderName: string) => void;
+  onBatchDownloadZip?: (tracks: Track[]) => void;
+  tracks?: Track[];
 }
 
 export const MobilePlaylistsView: React.FC<MobilePlaylistsViewProps> = ({
@@ -41,6 +48,10 @@ export const MobilePlaylistsView: React.FC<MobilePlaylistsViewProps> = ({
   totalTracks,
   offlineCount = 0,
   onNavigateToTracks,
+  offlinePlaylists = {},
+  onToggleFolderOffline,
+  onBatchDownloadZip,
+  tracks = [],
 }) => {
   const [isCreating, setIsCreating] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
@@ -233,7 +244,50 @@ export const MobilePlaylistsView: React.FC<MobilePlaylistsViewProps> = ({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1 shrink-0">
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {/* Batch Download Block Button */}
+                  {onBatchDownloadZip && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const plTracks = tracks.filter((t) => t.playlist === pl.name);
+                        onBatchDownloadZip(plTracks.length > 0 ? plTracks : tracks);
+                      }}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-purple-300 hover:bg-slate-800 active:scale-95 transition-all"
+                      title="Descargar bloque de canciones en ZIP"
+                    >
+                      <FileArchive className="w-4 h-4" />
+                    </button>
+                  )}
+
+                  {/* Offline Download Switch */}
+                  {onToggleFolderOffline && (
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={Boolean(offlinePlaylists[pl.name])}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleFolderOffline(pl.name);
+                      }}
+                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                        offlinePlaylists[pl.name] ? 'bg-emerald-600' : 'bg-slate-700'
+                      }`}
+                      title={
+                        offlinePlaylists[pl.name]
+                          ? 'Descargado offline (Haz clic para desactivar)'
+                          : 'Descargar toda la playlist para escuchar sin conexión'
+                      }
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          offlinePlaylists[pl.name] ? 'translate-x-4' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  )}
+
                   {pl.isCustom && (
                     <button
                       type="button"
@@ -243,7 +297,7 @@ export const MobilePlaylistsView: React.FC<MobilePlaylistsViewProps> = ({
                           onDeleteCustomPlaylist(pl.name);
                         }
                       }}
-                      className="p-2 text-slate-400 hover:text-rose-400 active:scale-90 transition-colors"
+                      className="p-1.5 text-slate-400 hover:text-rose-400 active:scale-90 transition-colors"
                       title="Eliminar playlist"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -252,7 +306,7 @@ export const MobilePlaylistsView: React.FC<MobilePlaylistsViewProps> = ({
                   <button
                     type="button"
                     onClick={() => handlePickPlaylist(pl.name)}
-                    className="p-2 text-slate-400 hover:text-white"
+                    className="p-1.5 text-slate-400 hover:text-white"
                   >
                     <ChevronRight className="w-5 h-5" />
                   </button>

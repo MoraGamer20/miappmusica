@@ -42,6 +42,8 @@ interface SidebarProps {
   onOpenSleepTimer?: () => void;
   onOpenLyrics?: () => void;
   hasCurrentTrack?: boolean;
+  offlinePlaylists?: Record<string, boolean>;
+  onToggleFolderOffline?: (folderName: string) => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -63,6 +65,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenSleepTimer,
   onOpenLyrics,
   hasCurrentTrack,
+  offlinePlaylists = {},
+  onToggleFolderOffline,
 }) => {
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
@@ -233,6 +237,33 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     </span>
                   </button>
 
+                  {/* Offline Download Switch Toggle */}
+                  {onToggleFolderOffline && (
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={Boolean(offlinePlaylists[pl.name])}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleFolderOffline(pl.name);
+                      }}
+                      className={`relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border border-transparent transition-colors duration-200 ease-in-out ml-1 ${
+                        offlinePlaylists[pl.name] ? 'bg-emerald-600' : 'bg-slate-700 opacity-60 group-hover:opacity-100'
+                      }`}
+                      title={
+                        offlinePlaylists[pl.name]
+                          ? 'Descargado offline (Haz clic para desactivar)'
+                          : 'Descargar toda la playlist para escuchar sin conexión'
+                      }
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          offlinePlaylists[pl.name] ? 'translate-x-3' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  )}
+
                   {/* Quick Folder Download Button on Hover */}
                   {onOpenFolderDownloadModal && (
                     <button
@@ -241,9 +272,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         e.stopPropagation();
                         onOpenFolderDownloadModal(pl.name);
                       }}
-                      className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-emerald-400 rounded-lg hover:bg-slate-800 transition-all ml-0.5 shrink-0"
-                      title={`Descargar carpeta "${pl.name}"`}
-                      aria-label={`Descargar carpeta ${pl.name}`}
+                      className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-purple-300 rounded-lg hover:bg-slate-800 transition-all ml-0.5 shrink-0"
+                      title={`Descargar bloque de canciones de "${pl.name}"`}
+                      aria-label={`Descargar bloque de ${pl.name}`}
                     >
                       <FolderDown className="w-3.5 h-3.5" />
                     </button>

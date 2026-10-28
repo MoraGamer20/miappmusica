@@ -36,13 +36,21 @@ import { MobileArtistsView } from './components/MobileArtistsView';
 import { MobileToolsView } from './components/MobileToolsView';
 import { equalizer } from './utils/equalizerService';
 import { updateMediaSession, updateMediaSessionPosition } from './utils/mediaSessionManager';
-import { getAllOfflineTrackIds, getOfflineAudioUrl, importLocalAudioFiles } from './utils/offlineAudioStorage';
+import {
+  getAllOfflineTrackIds,
+  getOfflineAudioUrl,
+  importLocalAudioFiles,
+  downloadAndSavePlaylistOffline,
+  removePlaylistOffline,
+} from './utils/offlineAudioStorage';
+import { downloadTrackAudio } from './utils/downloadHelper';
 import defaultCsvRaw from '../public/assets/aistudio/My_Deezer_Library_e6092c00.csv?raw';
-import { Heart, Play, Shuffle, Sliders, Download, Sparkles, ListMusic, Users, Clock, RotateCcw, X, Music, HardDrive, FolderDown, Upload, Disc } from 'lucide-react';
+import { Heart, Play, Shuffle, Sliders, Download, Sparkles, ListMusic, Users, Clock, RotateCcw, X, Music, HardDrive, FolderDown, Upload, Disc, Loader2 } from 'lucide-react';
 
 const STORAGE_KEY = 'deezer_library_tracks_v4_authentic';
 const CUSTOM_PLAYLISTS_KEY = 'deezer_custom_playlists_v2';
 const RECENTLY_PLAYED_KEY = 'deezer_recently_played_v1';
+const OFFLINE_PLAYLISTS_KEY = 'deezer_offline_playlists_v1';
 const DEFAULT_CSV_PATH = '/assets/aistudio/My_Deezer_Library_e6092c00.csv';
 
 export const isFavoritesPlaylist = (name: string): boolean => {
@@ -120,6 +128,20 @@ export default function App() {
   };
 
   const [offlineTrackIds, setOfflineTrackIds] = useState<Set<string>>(new Set());
+  const [offlinePlaylists, setOfflinePlaylists] = useState<Record<string, boolean>>(() => {
+    try {
+      const saved = localStorage.getItem(OFFLINE_PLAYLISTS_KEY);
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+  const [offlineSyncProgress, setOfflineSyncProgress] = useState<{
+    current: number;
+    total: number;
+    trackTitle: string;
+    playlistName: string;
+  } | null>(null);
   const localAudioInputRef = useRef<HTMLInputElement | null>(null);
   const [searchModalInitialQuery, setSearchModalInitialQuery] = useState('');
   const [isStatsModalOpen, setIsStatsModalOpen] = useState(false);
@@ -243,6 +265,77 @@ export default function App() {
     } catch (err) {
       console.error('Error importing local audio', err);
       showToast('Error al importar archivos locales');
+    }
+  };
+
+  // Toggle offline download for an entire playlist/folder
+  const handleTogglePlaylistOffline = async (playlistName: string) => {
+    const isCurrentlyOffline = Boolean(offlinePlaylists[playlistName]);
+    const isFav = isFavoritesPlaylist(playlistName);
+    const targetTracks =
+      playlistName === 'ALL'
+        ? tracks
+        : isFav
+        ? tracks.filter((t) => Boolean(t.isFavorite || t.playlist?.toLowerCase().includes('favorit')))
+        : tracks.filter((t) => (t.playlist || 'General').toLowerCase() === playlistName.toLowerCase());
+
+    if (isCurrentlyOffline) {
+      // Turn OFF
+      await removePlaylistOffline(targetTracks);
+      const updated = { ...offlinePlaylists, [playlistName]: false };
+      setOfflinePlaylists(updated);
+      try {
+        localStorage.setItem(OFFLINE_PLAYLISTS_KEY, JSON.stringify(updated));
+      } catch {}
+      const newIds = await getAllOfflineTrackIds();
+      setOfflineTrackIds(newIds);
+      showToast(`Descarga sin conexión desactivada para "${playlistName}"`);
+    } else {
+      // Turn ON
+      setOfflineSyncProgress({
+        current: 0,
+        total: targetTracks.length,
+        trackTitle: 'Iniciando descarga...',
+        playlistName,
+      });
+
+      try {
+        const savedIds = await downloadAndSavePlaylistOffline(targetTracks, (curr, tot, title) => {
+          setOfflineSyncProgress({
+            current: curr,
+            total: tot,
+            trackTitle: title,
+            playlistName,
+          });
+        });
+
+        const updated = { ...offlinePlaylists, [playlistName]: true };
+        setOfflinePlaylists(updated);
+        try {
+          localStorage.setItem(OFFLINE_PLAYLISTS_KEY, JSON.stringify(updated));
+        } catch {}
+        const newIds = await getAllOfflineTrackIds();
+        setOfflineTrackIds(newIds);
+        showToast(`¡"${playlistName}" descargada para escuchar sin conexión! (${savedIds.length} canciones) 🎧`);
+      } catch (e) {
+        console.error('Error downloading playlist offline', e);
+        showToast('Error al descargar playlist para offline');
+      } finally {
+        setOfflineSyncProgress(null);
+      }
+    }
+  };
+
+  // Direct MP3 download handler without redirects
+  const handleDirectDownloadTrack = async (track: Track) => {
+    showToast(`Descargando "${track.title}" en MP3...`);
+    const ok = await downloadTrackAudio(track);
+    if (ok) {
+      showToast(`¡"${track.title}" descargada con éxito!`);
+      const newIds = await getAllOfflineTrackIds();
+      setOfflineTrackIds(newIds);
+    } else {
+      setDownloadModalTrack(track);
     }
   };
 
@@ -1096,6 +1189,8 @@ export default function App() {
           onOpenEqualizer={() => setIsEqualizerOpen(true)}
           onOpenSleepTimer={() => setIsSleepTimerOpen(true)}
           hasCurrentTrack={currentTrack !== null}
+          offlinePlaylists={offlinePlaylists}
+          onToggleFolderOffline={handleTogglePlaylistOffline}
         />
 
         {/* =========================================
@@ -1272,6 +1367,10 @@ export default function App() {
                   setIsDiscoveryModalOpen(true);
                 }}
                 offlineTrackIds={offlineTrackIds}
+                activePlaylist={activePlaylist}
+                isFolderOffline={Boolean(offlinePlaylists[activePlaylist])}
+                onToggleFolderOffline={handleTogglePlaylistOffline}
+                onDirectDownloadTrack={handleDirectDownloadTrack}
               />
             </div>
           )}
@@ -1289,6 +1388,10 @@ export default function App() {
               totalTracks={tracks.length}
               offlineCount={tracks.filter((t) => offlineTrackIds.has(t.id) || t.isOfflineAvailable).length}
               onNavigateToTracks={() => setMobileTab('tracks')}
+              offlinePlaylists={offlinePlaylists}
+              onToggleFolderOffline={handleTogglePlaylistOffline}
+              onBatchDownloadZip={handleBatchDownloadZip}
+              tracks={tracks}
             />
           )}
 
@@ -1376,6 +1479,10 @@ export default function App() {
                   setIsDiscoveryModalOpen(true);
                 }}
                 offlineTrackIds={offlineTrackIds}
+                activePlaylist="Favorite Tracks"
+                isFolderOffline={Boolean(offlinePlaylists['Favorite Tracks'])}
+                onToggleFolderOffline={handleTogglePlaylistOffline}
+                onDirectDownloadTrack={handleDirectDownloadTrack}
               />
             </div>
           )}
@@ -1516,6 +1623,10 @@ export default function App() {
               setIsDiscoveryModalOpen(true);
             }}
             offlineTrackIds={offlineTrackIds}
+            activePlaylist={activePlaylist}
+            isFolderOffline={Boolean(offlinePlaylists[activePlaylist])}
+            onToggleFolderOffline={handleTogglePlaylistOffline}
+            onDirectDownloadTrack={handleDirectDownloadTrack}
           />
         </div>
       </div>
@@ -1681,6 +1792,8 @@ export default function App() {
         availablePlaylists={availablePlaylistNames}
         initialFolder={folderDownloadInitialName}
         onTriggerImportLocal={() => localAudioInputRef.current?.click()}
+        offlinePlaylists={offlinePlaylists}
+        onToggleFolderOffline={handleTogglePlaylistOffline}
       />
 
       {/* Song Discovery & Web Add Modal */}
@@ -1765,6 +1878,42 @@ export default function App() {
         currentTrackTitle={batchDownloadState.currentTrackTitle}
         isComplete={batchDownloadState.isComplete}
       />
+
+      {/* Offline Sync Progress Modal */}
+      {offlineSyncProgress && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-emerald-500/40 rounded-3xl p-6 max-w-sm w-full shadow-2xl text-center flex flex-col items-center">
+            <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center mb-4 shadow-lg shadow-emerald-950/50">
+              <Loader2 className="w-7 h-7 animate-spin" />
+            </div>
+            <h3 className="text-lg font-bold text-white mb-1">
+              Descargando para modo Offline
+            </h3>
+            <p className="text-xs text-emerald-400 font-semibold mb-3">
+              Carpeta: {offlineSyncProgress.playlistName}
+            </p>
+            <p className="text-xs text-slate-300 truncate max-w-full px-2 mb-4 font-medium">
+              {offlineSyncProgress.trackTitle}
+            </p>
+            {/* Progress Bar */}
+            <div className="w-full bg-slate-800 rounded-full h-2.5 overflow-hidden mb-2 border border-slate-700/60">
+              <div
+                className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full transition-all duration-200 rounded-full"
+                style={{
+                  width: `${Math.round((offlineSyncProgress.current / Math.max(1, offlineSyncProgress.total)) * 100)}%`,
+                }}
+              />
+            </div>
+            <div className="flex justify-between w-full text-[11px] text-slate-400 font-mono">
+              <span>{offlineSyncProgress.current} de {offlineSyncProgress.total} canciones</span>
+              <span>{Math.round((offlineSyncProgress.current / Math.max(1, offlineSyncProgress.total)) * 100)}%</span>
+            </div>
+            <p className="text-[10px] text-slate-400 mt-4 bg-slate-800/60 rounded-xl px-3 py-1.5 border border-slate-700/40">
+              Al finalizar, podrás escuchar todas las canciones sin conexión a internet ni consumo de datos.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Interactive Toast Notifications */}
       {toastMessage && (

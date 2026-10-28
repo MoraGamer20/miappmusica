@@ -16,15 +16,18 @@ import {
   ExternalLink,
   Disc,
   FolderArchive,
+  HardDrive,
+  FileArchive,
 } from 'lucide-react';
 import { Track } from '../types/music';
 import {
   downloadTracksByFolderZip,
+  downloadBatchZip,
+  downloadTrackAudio,
   downloadTracksAsM3U,
   downloadTracksAsCSV,
   downloadTracksAsJSON,
 } from '../utils/downloadHelper';
-import { getFullDownloadLinks } from '../utils/fullAudioService';
 
 interface FolderDownloadModalProps {
   isOpen: boolean;
@@ -33,6 +36,8 @@ interface FolderDownloadModalProps {
   availablePlaylists: string[];
   initialFolder?: string;
   onTriggerImportLocal?: () => void;
+  offlinePlaylists?: Record<string, boolean>;
+  onToggleFolderOffline?: (folderName: string) => void;
 }
 
 export const FolderDownloadModal: React.FC<FolderDownloadModalProps> = ({
@@ -42,6 +47,8 @@ export const FolderDownloadModal: React.FC<FolderDownloadModalProps> = ({
   availablePlaylists,
   initialFolder = 'ALL',
   onTriggerImportLocal,
+  offlinePlaylists = {},
+  onToggleFolderOffline,
 }) => {
   const [selectedFolder, setSelectedFolder] = useState<string>('ALL');
   const [activeTab, setActiveTab] = useState<'songs' | 'export' | 'offline'>('songs');
@@ -53,6 +60,7 @@ export const FolderDownloadModal: React.FC<FolderDownloadModalProps> = ({
     total: 0,
     statusText: '',
   });
+  const [downloadingSongId, setDownloadingSongId] = useState<string | null>(null);
 
   // Sync initial folder when modal opens
   useEffect(() => {
@@ -65,8 +73,6 @@ export const FolderDownloadModal: React.FC<FolderDownloadModalProps> = ({
     }
   }, [isOpen, initialFolder]);
 
-  if (!isOpen) return null;
-
   // Filter target tracks for the chosen folder
   const isFavorites =
     selectedFolder.toLowerCase() === 'favorite tracks' ||
@@ -74,12 +80,14 @@ export const FolderDownloadModal: React.FC<FolderDownloadModalProps> = ({
     selectedFolder.toLowerCase() === 'favoritos' ||
     selectedFolder.toLowerCase() === 'canciones favoritas';
 
-  const targetTracks =
-    selectedFolder === 'ALL'
-      ? tracks
-      : isFavorites
-      ? tracks.filter((t) => Boolean(t.isFavorite || t.playlist?.toLowerCase().includes('favorit')))
-      : tracks.filter((t) => (t.playlist || 'General').toLowerCase() === selectedFolder.toLowerCase());
+  const targetTracks = useMemo(() => {
+    if (!isOpen) return [];
+    if (selectedFolder === 'ALL') return tracks;
+    if (isFavorites) {
+      return tracks.filter((t) => Boolean(t.isFavorite || t.playlist?.toLowerCase().includes('favorit')));
+    }
+    return tracks.filter((t) => (t.playlist || 'General').toLowerCase() === selectedFolder.toLowerCase());
+  }, [isOpen, selectedFolder, isFavorites, tracks]);
 
   const safeFolderName =
     selectedFolder === 'ALL'
@@ -90,7 +98,7 @@ export const FolderDownloadModal: React.FC<FolderDownloadModalProps> = ({
 
   // Filter songs by search term
   const filteredTracks = useMemo(() => {
-    if (!filterSearch.trim()) return targetTracks;
+    if (!isOpen || !filterSearch.trim()) return targetTracks;
     const q = filterSearch.toLowerCase().trim();
     return targetTracks.filter(
       (t) =>
@@ -98,13 +106,16 @@ export const FolderDownloadModal: React.FC<FolderDownloadModalProps> = ({
         t.artist.toLowerCase().includes(q) ||
         (t.album && t.album.toLowerCase().includes(q))
     );
-  }, [targetTracks, filterSearch]);
+  }, [isOpen, targetTracks, filterSearch]);
 
-  const handleDownloadSongMP3 = (track: Track) => {
-    const links = getFullDownloadLinks(track, null);
-    const targetUrl = links.youtUrl || links.youtubeUrl;
-    if (typeof window !== 'undefined') {
-      window.open(targetUrl, '_blank', 'noopener,noreferrer');
+  if (!isOpen) return null;
+
+  const handleDownloadSongMP3 = async (track: Track) => {
+    setDownloadingSongId(track.id);
+    try {
+      await downloadTrackAudio(track);
+    } finally {
+      setDownloadingSongId(null);
     }
   };
 
@@ -220,6 +231,74 @@ export const FolderDownloadModal: React.FC<FolderDownloadModalProps> = ({
                 </option>
               ))}
           </select>
+        </div>
+
+        {/* Offline Switch & Batch Download Bar */}
+        <div className="mb-3 p-3 rounded-2xl bg-slate-800/80 border border-slate-700/80 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div
+              className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                offlinePlaylists[selectedFolder]
+                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                  : 'bg-slate-800 text-slate-400'
+              }`}
+            >
+              <HardDrive className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <span className="text-xs font-bold text-white flex items-center gap-1.5 truncate">
+                Descargar para escuchar sin conexión
+                {offlinePlaylists[selectedFolder] && (
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-500/30">
+                    ✓ Activado
+                  </span>
+                )}
+              </span>
+              <p className="text-[10px] text-slate-400 truncate">
+                {offlinePlaylists[selectedFolder]
+                  ? 'Canciones guardadas en este celular • Reproduce sin internet'
+                  : 'Guarda todas las canciones de esta carpeta para escuchar sin conexión'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Quick Batch Download Block Button */}
+            <button
+              type="button"
+              onClick={handleDownloadZip}
+              disabled={isPackagingZip}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white shadow-md active:scale-95 transition-all disabled:opacity-50"
+              title="Descargar este bloque de canciones completo en archivo ZIP"
+            >
+              <FileArchive className="w-3.5 h-3.5" />
+              <span>{isPackagingZip ? 'Empaquetando...' : 'Descargar Bloque ZIP'}</span>
+            </button>
+
+            {/* Toggle Switch */}
+            {onToggleFolderOffline && (
+              <button
+                type="button"
+                role="switch"
+                aria-checked={Boolean(offlinePlaylists[selectedFolder])}
+                onClick={() => onToggleFolderOffline(selectedFolder)}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                  offlinePlaylists[selectedFolder] ? 'bg-emerald-600' : 'bg-slate-700'
+                }`}
+                title={
+                  offlinePlaylists[selectedFolder]
+                    ? 'Desactivar descarga sin conexión'
+                    : 'Descargar toda la carpeta para escuchar sin conexión'
+                }
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                    offlinePlaylists[selectedFolder] ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Tab Selector */}

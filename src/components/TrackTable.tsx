@@ -48,6 +48,10 @@ interface TrackTableProps {
   onOpenDownloadModal: (track: Track) => void;
   onOpenSearchModal?: (query?: string) => void;
   offlineTrackIds?: Set<string>;
+  activePlaylist?: string;
+  isFolderOffline?: boolean;
+  onToggleFolderOffline?: (folderName: string) => void;
+  onDirectDownloadTrack?: (track: Track) => void;
 }
 
 export const TrackTable: React.FC<TrackTableProps> = ({
@@ -70,6 +74,10 @@ export const TrackTable: React.FC<TrackTableProps> = ({
   onOpenDownloadModal,
   onOpenSearchModal,
   offlineTrackIds,
+  activePlaylist,
+  isFolderOffline,
+  onToggleFolderOffline,
+  onDirectDownloadTrack,
 }) => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
@@ -165,6 +173,76 @@ export const TrackTable: React.FC<TrackTableProps> = ({
 
   return (
     <div className="flex-1 flex flex-col min-w-0 w-full max-w-full bg-slate-950 pb-44 overflow-x-hidden">
+      {/* =========================================================================
+          OFFLINE FOLDER DOWNLOAD SWITCH: Download whole folder for offline listening
+          ========================================================================= */}
+      {onToggleFolderOffline && (
+        <div className="flex items-center justify-between px-3.5 sm:px-6 py-2.5 bg-gradient-to-r from-slate-900 via-slate-900/90 to-emerald-950/40 border-b border-slate-800/80">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div
+              className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                isFolderOffline
+                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                  : 'bg-slate-800 text-slate-400'
+              }`}
+            >
+              <HardDrive className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <span className="text-xs font-bold text-white flex items-center gap-1.5 truncate">
+                Descargar para escuchar sin conexión
+                {isFolderOffline && (
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-500/30">
+                    ✓ Activado
+                  </span>
+                )}
+              </span>
+              <p className="text-[10px] text-slate-400 truncate">
+                {isFolderOffline
+                  ? 'Canciones descargadas en este dispositivo • Se reproducen sin internet'
+                  : 'Activa el switch para descargar todas las canciones y reproducir sin internet'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Quick Batch Download Block Button */}
+            <button
+              type="button"
+              onClick={() => onBatchDownloadZip(tracks)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-purple-600/25 text-purple-300 border border-purple-500/40 hover:bg-purple-600/40 active:scale-95 transition-all shadow-sm"
+              title="Descargar este bloque de canciones completo en archivo ZIP"
+            >
+              <FileArchive className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Descargar Bloque ({tracks.length})</span>
+              <span className="sm:hidden">Bloque</span>
+            </button>
+
+            {/* Toggle Switch */}
+            <button
+              type="button"
+              role="switch"
+              aria-checked={isFolderOffline}
+              onClick={() => onToggleFolderOffline(activePlaylist || 'ALL')}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                isFolderOffline ? 'bg-emerald-600' : 'bg-slate-700'
+              }`}
+              title={
+                isFolderOffline
+                  ? 'Desactivar descarga sin conexión'
+                  : 'Descargar toda esta carpeta para escuchar sin conexión'
+              }
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                  isFolderOffline ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* =========================================================================
           CONTROLS TOOLBAR: Opaque background, no conflicting sticky offsets or blurs
           ========================================================================= */}
@@ -522,14 +600,21 @@ export const TrackTable: React.FC<TrackTableProps> = ({
                   />
                 </button>
 
-                {/* 1-Tap Download Modal Trigger */}
+                {/* 1-Tap Download Button */}
                 <button
                   type="button"
-                  onClick={() => onOpenDownloadModal(track)}
+                  onClick={() => {
+                    if (onDirectDownloadTrack) {
+                      onDirectDownloadTrack(track);
+                    } else {
+                      onOpenDownloadModal(track);
+                    }
+                  }}
                   aria-label={`Descargar ${track.title}`}
                   className="w-9 h-9 rounded-full flex items-center justify-center text-slate-400 hover:text-emerald-400 active:scale-90 transition-transform"
+                  title="Descargar archivo MP3 directo"
                 >
-                  <Download className="w-4 h-4" />
+                  <Download className={`w-4 h-4 ${offlineTrackIds?.has(track.id) ? 'text-emerald-400' : ''}`} />
                 </button>
 
                 {/* 3-Dots Action Sheet Button */}
@@ -758,12 +843,18 @@ export const TrackTable: React.FC<TrackTableProps> = ({
 
                       <button
                         type="button"
-                        onClick={() => onOpenDownloadModal(track)}
+                        onClick={() => {
+                          if (onDirectDownloadTrack) {
+                            onDirectDownloadTrack(track);
+                          } else {
+                            onOpenDownloadModal(track);
+                          }
+                        }}
                         aria-label={`Descargar ${track.title}`}
                         className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-400 transition-colors"
-                        title="Descargar canción completa (MP3 320kbps)"
+                        title="Descargar archivo MP3 directo"
                       >
-                        <Download className="w-4 h-4" />
+                        <Download className={`w-4 h-4 ${offlineTrackIds?.has(track.id) ? 'text-emerald-400' : ''}`} />
                       </button>
 
                       <button

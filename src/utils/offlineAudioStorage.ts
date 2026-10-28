@@ -241,3 +241,49 @@ export async function importLocalAudioFiles(
 
   return importedTracks;
 }
+
+/**
+ * Downloads and caches all tracks of a playlist into IndexedDB for 100% offline playback.
+ */
+export async function downloadAndSavePlaylistOffline(
+  tracks: Track[],
+  onProgress?: (current: number, total: number, trackTitle: string) => void
+): Promise<string[]> {
+  const savedIds: string[] = [];
+  const total = tracks.length;
+
+  for (let i = 0; i < tracks.length; i++) {
+    const t = tracks[i];
+    onProgress?.(i + 1, total, `${t.artist} - ${t.title}`);
+
+    try {
+      let blob = await getOfflineAudioBlob(t.id);
+      if (!blob && t.previewUrl) {
+        const res = await fetch(t.previewUrl);
+        if (res.ok) {
+          blob = await res.blob();
+          await saveOfflineAudio(t, blob);
+        }
+      }
+
+      if (blob) {
+        savedIds.push(t.id);
+      }
+    } catch (e) {
+      console.warn('Error saving offline track in playlist batch', t.id, e);
+    }
+  }
+
+  return savedIds;
+}
+
+/**
+ * Removes all tracks in a playlist from offline storage
+ */
+export async function removePlaylistOffline(tracks: Track[]): Promise<void> {
+  for (const t of tracks) {
+    try {
+      await deleteOfflineAudio(t.id);
+    } catch {}
+  }
+}
