@@ -17,7 +17,6 @@ import {
 } from 'lucide-react';
 import { Track } from '../types/music';
 import { getFullTrackVideoId, getFullDownloadLinks } from '../utils/fullAudioService';
-import { downloadTrackAudio } from '../utils/downloadHelper';
 import { saveOfflineAudio, isTrackOffline } from '../utils/offlineAudioStorage';
 
 interface FullTrackDownloadModalProps {
@@ -38,7 +37,6 @@ export const FullTrackDownloadModal: React.FC<FullTrackDownloadModalProps> = ({
   const [videoId, setVideoId] = useState<string | null>(null);
   const [isLoadingVideoId, setIsLoadingVideoId] = useState(false);
   const [copiedCommand, setCopiedCommand] = useState(false);
-  const [isDownloadingPreview, setIsDownloadingPreview] = useState(false);
   const [isSavingOffline, setIsSavingOffline] = useState(false);
   const [isAlreadyOffline, setIsAlreadyOffline] = useState(false);
 
@@ -63,12 +61,6 @@ export const FullTrackDownloadModal: React.FC<FullTrackDownloadModalProps> = ({
     navigator.clipboard.writeText(links.ytDlpCommand);
     setCopiedCommand(true);
     setTimeout(() => setCopiedCommand(false), 2000);
-  };
-
-  const handleDownloadPreview = async () => {
-    setIsDownloadingPreview(true);
-    await downloadTrackAudio(track);
-    setIsDownloadingPreview(false);
   };
 
   const handleSaveToOffline = async () => {
@@ -106,8 +98,8 @@ export const FullTrackDownloadModal: React.FC<FullTrackDownloadModalProps> = ({
               <Download className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white">Descargar Canción</h3>
-              <p className="text-xs text-slate-400">Canción Completa o Modo Offline</p>
+              <h3 className="text-base font-bold text-white">Descargar Canción Completa</h3>
+              <p className="text-xs text-emerald-400 font-medium">MP3 a 320kbps • Cero fragmentos de 30s</p>
             </div>
           </div>
           <button
@@ -145,8 +137,8 @@ export const FullTrackDownloadModal: React.FC<FullTrackDownloadModalProps> = ({
               <HardDrive className="w-4 h-4" />
             </div>
             <div>
-              <p className="text-xs font-bold text-white">Reproducción Offline en la App</p>
-              <p className="text-[10px] text-slate-400">Guarda en memoria para escuchar sin internet</p>
+              <p className="text-xs font-bold text-white">Memoria Offline del Reproductor</p>
+              <p className="text-[10px] text-slate-400">Guarda en caché local para reproducir sin conexión</p>
             </div>
           </div>
           <button
@@ -162,7 +154,7 @@ export const FullTrackDownloadModal: React.FC<FullTrackDownloadModalProps> = ({
             {isAlreadyOffline ? (
               <>
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                <span>En Disco</span>
+                <span>Guardado</span>
               </>
             ) : isSavingOffline ? (
               <span>Guardando...</span>
@@ -175,12 +167,15 @@ export const FullTrackDownloadModal: React.FC<FullTrackDownloadModalProps> = ({
           </button>
         </div>
 
-        {/* SECTION 1: Full Song Download Options */}
+        {/* Full Song Download Options */}
         <div className="space-y-3">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-              Opción 1: Descargar Canción Completa (MP3 Alta Calidad)
+              Descargar Canción Completa (MP3 320kbps)
+            </span>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold">
+              ✓ Cero fragmentos de 30s
             </span>
           </div>
 
@@ -196,7 +191,7 @@ export const FullTrackDownloadModal: React.FC<FullTrackDownloadModalProps> = ({
                 <Globe className="w-4 h-4 text-emerald-400" />
                 <div>
                   <p className="text-xs font-bold text-white group-hover:text-emerald-300">Descargador Yout (1-Clic)</p>
-                  <p className="text-[10px] text-slate-400">Canción completa en MP3</p>
+                  <p className="text-[10px] text-slate-400">Canción completa en MP3 320kbps</p>
                 </div>
               </div>
               <ExternalLink className="w-3.5 h-3.5 text-emerald-400" />
@@ -212,7 +207,39 @@ export const FullTrackDownloadModal: React.FC<FullTrackDownloadModalProps> = ({
                 <Sparkles className="w-4 h-4 text-purple-400" />
                 <div>
                   <p className="text-xs font-bold text-white group-hover:text-purple-300">Cobalt.tools (Sin anuncios)</p>
-                  <p className="text-[10px] text-slate-400">Descarga directa en alta fidelidad</p>
+                  <p className="text-[10px] text-slate-400">Audio directo en máxima calidad</p>
+                </div>
+              </div>
+              <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
+            </a>
+
+            <a
+              href={links.dirpyUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-between p-3 rounded-xl bg-slate-800 hover:bg-slate-750 border border-slate-700 text-slate-200 transition-colors group"
+            >
+              <div className="flex items-center gap-2.5">
+                <Music className="w-4 h-4 text-indigo-400" />
+                <div>
+                  <p className="text-xs font-bold text-white group-hover:text-indigo-300">Dirpy Studio MP3</p>
+                  <p className="text-[10px] text-slate-400">Pista completa con etiquetas ID3</p>
+                </div>
+              </div>
+              <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
+            </a>
+
+            <a
+              href={links.youtubeUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-between p-3 rounded-xl bg-slate-800 hover:bg-slate-750 border border-slate-700 text-slate-200 transition-colors group"
+            >
+              <div className="flex items-center gap-2.5">
+                <Globe className="w-4 h-4 text-red-400" />
+                <div>
+                  <p className="text-xs font-bold text-white group-hover:text-red-300">Audio Oficial Completo</p>
+                  <p className="text-[10px] text-slate-400">Enlace directo a pista completa</p>
                 </div>
               </div>
               <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
@@ -239,28 +266,6 @@ export const FullTrackDownloadModal: React.FC<FullTrackDownloadModalProps> = ({
               {links.ytDlpCommand}
             </code>
           </div>
-        </div>
-
-        {/* SECTION 2: 30s Deezer Preview */}
-        <div className="mt-4 pt-3.5 border-t border-slate-800">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-purple-400" />
-              Opción 2: Descargar Vista Previa Rápida (30 segundos)
-            </span>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleDownloadPreview}
-            disabled={isDownloadingPreview}
-            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold text-xs transition-colors disabled:opacity-50"
-          >
-            <Download className={`w-4 h-4 text-purple-400 ${isDownloadingPreview ? 'animate-bounce' : ''}`} />
-            <span>
-              {isDownloadingPreview ? 'Descargando audio...' : 'Descargar Preview MP3 Oficial de Deezer'}
-            </span>
-          </button>
         </div>
 
         {/* SECTION 3: Bulk Library Downloader */}

@@ -35,7 +35,7 @@ interface SidebarProps {
   totalTracks: number;
   offlineCount?: number;
   onOpenAddModal?: () => void;
-  onOpenFolderDownloadModal?: () => void;
+  onOpenFolderDownloadModal?: (folderName?: string) => void;
   onImportLocalAudio?: () => void;
   onOpenVercelGuide?: () => void;
   onOpenEqualizer?: () => void;
@@ -216,22 +216,38 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   >
                     <div className="flex items-center gap-2.5 truncate">
                       {isFav ? (
-                        <Heart className="w-4 h-4 text-rose-400 shrink-0 fill-rose-400/20" />
+                        <Heart className="w-4 h-4 text-rose-400 shrink-0 fill-rose-500" />
                       ) : (
                         <Disc className="w-4 h-4 text-slate-400 group-hover:text-purple-400 shrink-0" />
                       )}
-                      <span className="truncate">{pl.name}</span>
+                      <span className="truncate">{isFav ? 'Favoritas (Corazón)' : pl.name}</span>
                     </div>
                     <span
                       className={`text-[11px] px-2 py-0.5 rounded-full ml-1 shrink-0 ${
                         isActive
-                          ? 'bg-purple-700/60 text-purple-100'
-                          : 'bg-slate-800 text-slate-400'
+                          ? isFav ? 'bg-rose-700/60 text-white' : 'bg-purple-700/60 text-purple-100'
+                          : isFav ? 'bg-rose-950/60 text-rose-300 border border-rose-500/20' : 'bg-slate-800 text-slate-400'
                       }`}
                     >
                       {pl.count}
                     </span>
                   </button>
+
+                  {/* Quick Folder Download Button on Hover */}
+                  {onOpenFolderDownloadModal && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenFolderDownloadModal(pl.name);
+                      }}
+                      className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-emerald-400 rounded-lg hover:bg-slate-800 transition-all ml-0.5 shrink-0"
+                      title={`Descargar carpeta "${pl.name}"`}
+                      aria-label={`Descargar carpeta ${pl.name}`}
+                    >
+                      <FolderDown className="w-3.5 h-3.5" />
+                    </button>
+                  )}
 
                   {pl.isCustom && (
                     <button
@@ -259,7 +275,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {onOpenFolderDownloadModal && (
             <button
               type="button"
-              onClick={onOpenFolderDownloadModal}
+              onClick={() => onOpenFolderDownloadModal()}
               className="w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs bg-slate-800/60 hover:bg-slate-800 text-emerald-300 hover:text-emerald-200 border border-emerald-500/20 transition-colors"
             >
               <div className="flex items-center gap-2">

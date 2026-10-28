@@ -38,7 +38,7 @@ import { equalizer } from './utils/equalizerService';
 import { updateMediaSession, updateMediaSessionPosition } from './utils/mediaSessionManager';
 import { getAllOfflineTrackIds, getOfflineAudioUrl, importLocalAudioFiles } from './utils/offlineAudioStorage';
 import defaultCsvRaw from '../public/assets/aistudio/My_Deezer_Library_e6092c00.csv?raw';
-import { Heart, Play, Shuffle, Sliders, Download, Sparkles, ListMusic, Users, Clock, RotateCcw, X, Music, HardDrive, FolderDown, Upload } from 'lucide-react';
+import { Heart, Play, Shuffle, Sliders, Download, Sparkles, ListMusic, Users, Clock, RotateCcw, X, Music, HardDrive, FolderDown, Upload, Disc } from 'lucide-react';
 
 const STORAGE_KEY = 'deezer_library_tracks_v4_authentic';
 const CUSTOM_PLAYLISTS_KEY = 'deezer_custom_playlists_v2';
@@ -112,6 +112,13 @@ export default function App() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isDiscoveryModalOpen, setIsDiscoveryModalOpen] = useState(false);
   const [isFolderDownloadOpen, setIsFolderDownloadOpen] = useState(false);
+  const [folderDownloadInitialName, setFolderDownloadInitialName] = useState<string>('ALL');
+
+  const handleOpenFolderDownload = (folderName?: string) => {
+    setFolderDownloadInitialName(folderName || (activePlaylist === 'ALL' ? 'ALL' : activePlaylist));
+    setIsFolderDownloadOpen(true);
+  };
+
   const [offlineTrackIds, setOfflineTrackIds] = useState<Set<string>>(new Set());
   const localAudioInputRef = useRef<HTMLInputElement | null>(null);
   const [searchModalInitialQuery, setSearchModalInitialQuery] = useState('');
@@ -1082,7 +1089,7 @@ export default function App() {
           totalTracks={tracks.length}
           offlineCount={tracks.filter((t) => offlineTrackIds.has(t.id) || t.isOfflineAvailable).length}
           onOpenAddModal={() => setIsDiscoveryModalOpen(true)}
-          onOpenFolderDownloadModal={() => setIsFolderDownloadOpen(true)}
+          onOpenFolderDownloadModal={(folderName) => handleOpenFolderDownload(folderName)}
           onImportLocalAudio={() => localAudioInputRef.current?.click()}
           onOpenVercelGuide={() => setIsVercelModalOpen(true)}
           onOpenLyrics={() => setIsLyricsOpen(true)}
@@ -1192,9 +1199,34 @@ export default function App() {
                   </button>
                 </div>
 
+                {/* Mobile Active Folder Quick Bar */}
+                <div className="mt-2.5 px-3 py-2 rounded-xl bg-slate-800/80 border border-slate-700/60 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="text-xs font-bold text-white truncate">
+                      {isFavoritesPlaylist(activePlaylist)
+                        ? '❤️ Favoritas'
+                        : activePlaylist === 'ALL'
+                        ? '🎵 Toda la música'
+                        : activePlaylist === 'OFFLINE'
+                        ? '💾 Offline'
+                        : `📁 ${activePlaylist}`}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-mono">({filteredTracks.length})</span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleOpenFolderDownload(activePlaylist === 'ALL' ? 'ALL' : activePlaylist)}
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] shadow shrink-0 active:scale-95 transition-all"
+                  >
+                    <FolderDown className="w-3.5 h-3.5" />
+                    <span>Descargar Carpeta</span>
+                  </button>
+                </div>
+
                 {/* Active Filter Banner if artist or playlist selected */}
-                {(selectedArtist || activePlaylist !== 'ALL') && (
-                  <div className="mt-2.5 px-3 py-1.5 rounded-xl bg-purple-950/40 border border-purple-500/30 flex items-center justify-between text-xs">
+                {(selectedArtist || (activePlaylist !== 'ALL' && !isFavoritesPlaylist(activePlaylist))) && (
+                  <div className="mt-2 px-3 py-1.5 rounded-xl bg-purple-950/40 border border-purple-500/30 flex items-center justify-between text-xs">
                     <span className="text-purple-200 truncate">
                       Filtrando por:{' '}
                       <strong className="text-white">
@@ -1295,16 +1327,28 @@ export default function App() {
                     </div>
                   </div>
 
-                  {favoriteTracks.length > 0 && (
+                  <div className="flex items-center gap-2 shrink-0">
+                    {favoriteTracks.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => playTrackDirect(favoriteTracks[0], favoriteTracks)}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 text-white font-semibold text-xs active:scale-95 transition-transform shadow-md shadow-rose-600/30"
+                      >
+                        <Play className="w-3.5 h-3.5 fill-current" />
+                        <span>Reproducir</span>
+                      </button>
+                    )}
+
                     <button
                       type="button"
-                      onClick={() => playTrackDirect(favoriteTracks[0], favoriteTracks)}
-                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 text-white font-semibold text-xs active:scale-95 transition-transform shadow-md shadow-rose-600/30 shrink-0"
+                      onClick={() => handleOpenFolderDownload('Favorite Tracks')}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold text-xs active:scale-95 transition-all shadow-md shadow-emerald-600/25"
+                      title="Descargar todas las canciones con corazón en MP3 completas para escuchar offline"
                     >
-                      <Play className="w-3.5 h-3.5 fill-current" />
-                      <span>Reproducir</span>
+                      <FolderDown className="w-3.5 h-3.5" />
+                      <span>Descargar Carpeta</span>
                     </button>
-                  )}
+                  </div>
                 </div>
               </div>
 
@@ -1361,7 +1405,94 @@ export default function App() {
         </div>
 
         {/* DESKTOP TRACK TABLE (hidden on mobile, visible on md and up) */}
-        <div className="hidden md:flex flex-1 min-w-0">
+        <div className="hidden md:flex flex-1 min-w-0 flex-col">
+          {/* Active Folder Header Banner */}
+          <div className="px-5 py-3.5 bg-gradient-to-r from-slate-900 via-slate-900 to-slate-950 border-b border-slate-800 flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-3 min-w-0">
+              <div
+                className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 shadow-lg ${
+                  isFavoritesPlaylist(activePlaylist)
+                    ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30 shadow-rose-900/30'
+                    : activePlaylist === 'OFFLINE'
+                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shadow-emerald-900/30'
+                    : 'bg-purple-600/20 text-purple-400 border border-purple-500/30 shadow-purple-900/30'
+                }`}
+              >
+                {isFavoritesPlaylist(activePlaylist) ? (
+                  <Heart className="w-5 h-5 fill-rose-500 text-rose-500" />
+                ) : activePlaylist === 'OFFLINE' ? (
+                  <HardDrive className="w-5 h-5 text-emerald-400" />
+                ) : activePlaylist === 'ALL' ? (
+                  <ListMusic className="w-5 h-5 text-purple-400" />
+                ) : (
+                  <Disc className="w-5 h-5 text-purple-400" />
+                )}
+              </div>
+
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-bold text-white truncate">
+                    {isFavoritesPlaylist(activePlaylist)
+                      ? 'Carpeta de Canciones Favoritas'
+                      : activePlaylist === 'ALL'
+                      ? 'Todas las canciones'
+                      : activePlaylist === 'OFFLINE'
+                      ? 'Descargadas / Offline'
+                      : `Carpeta: ${activePlaylist}`}
+                  </h2>
+                  {isFavoritesPlaylist(activePlaylist) && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 font-semibold">
+                      ♥ Todas con corazón
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-400 truncate">
+                  <strong className="text-slate-200">{filteredTracks.length}</strong> canciones
+                  {selectedArtist && ` • Artista: ${selectedArtist}`}
+                  {searchQuery && ` • Búsqueda: "${searchQuery}"`}
+                  {' • '}
+                  Audio Completo disponible para escuchar y descargar
+                </p>
+              </div>
+            </div>
+
+            {/* Folder Actions: Play & Download Complete Folder */}
+            <div className="flex items-center gap-2 shrink-0">
+              {filteredTracks.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => playTrackDirect(filteredTracks[0], filteredTracks)}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs shadow-md shadow-purple-600/30 active:scale-95 transition-all"
+                  title="Reproducir canciones de esta carpeta"
+                >
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                  <span>Reproducir</span>
+                </button>
+              )}
+
+              {/* REQUESTED BUTTON: Descargar Carpeta Completa (Offline) */}
+              <button
+                type="button"
+                onClick={() => handleOpenFolderDownload(activePlaylist === 'ALL' ? 'ALL' : activePlaylist)}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/25 active:scale-95 transition-all border border-emerald-400/30"
+                title="Descargar todas las canciones de esta carpeta en MP3 completo para escuchar offline"
+              >
+                <FolderDown className="w-4 h-4" />
+                <span>Descargar Carpeta Completa (Offline)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => localAudioInputRef.current?.click()}
+                className="hidden xl:flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white border border-slate-700 text-xs font-medium transition-colors"
+                title="Importar archivos MP3 desde tu equipo a esta carpeta"
+              >
+                <Upload className="w-3.5 h-3.5 text-blue-400" />
+                <span>Importar MP3</span>
+              </button>
+            </div>
+          </div>
+
           <TrackTable
             tracks={filteredTracks}
             currentTrack={currentTrack}
@@ -1542,12 +1673,14 @@ export default function App() {
         }}
       />
 
-      {/* Folder Download Modal (Structured ZIP with playlist subfolders or direct to PC disk) */}
+      {/* Folder Download Modal (Complete Songs & Structured ZIP per playlist) */}
       <FolderDownloadModal
         isOpen={isFolderDownloadOpen}
         onClose={() => setIsFolderDownloadOpen(false)}
         tracks={tracks}
         availablePlaylists={availablePlaylistNames}
+        initialFolder={folderDownloadInitialName}
+        onTriggerImportLocal={() => localAudioInputRef.current?.click()}
       />
 
       {/* Song Discovery & Web Add Modal */}

@@ -108,14 +108,17 @@ export function getFullDownloadLinks(track: Track, videoId: string | null) {
  * for downloading the user's complete library of full-length 320kbps MP3s.
  */
 export function generateBulkDownloadScripts(tracks: Track[], libraryName = 'Biblioteca_Deezer_Completa') {
+  const safeFolderName = libraryName.replace(/[/\\?%*:|"<>]/g, '_').trim() || 'Musica_Completa';
+
   // Windows Batch script
   const batLines = [
     '@echo off',
     'chcp 65001 >nul',
-    'title Descargador Masivo de Musica Completa Deezer',
+    `title Descargador de Canciones Completas - ${safeFolderName}`,
     'echo ========================================================',
     'echo    DESCARGADOR DE CANCIONES COMPLETAS (320kbps MP3)',
-    `echo    Biblioteca: ${tracks.length} canciones`,
+    `echo    Carpeta / Playlist: ${safeFolderName}`,
+    `echo    Total de canciones: ${tracks.length}`,
     'echo ========================================================',
     'echo.',
     'where yt-dlp >nul 2>nul',
@@ -128,10 +131,10 @@ export function generateBulkDownloadScripts(tracks: Track[], libraryName = 'Bibl
     '    pause',
     '    exit /b',
     ')',
-    'echo [OK] yt-dlp detectado. Iniciando descargas completas en carpeta ./Musica_Completa...',
+    `echo [OK] yt-dlp detectado. Descargando canciones completas en la subcarpeta ./${safeFolderName}...`,
     'echo.',
-    'if not exist "Musica_Completa" mkdir "Musica_Completa"',
-    'cd "Musica_Completa"',
+    `if not exist "${safeFolderName}" mkdir "${safeFolderName}"`,
+    `cd "${safeFolderName}"`,
     'echo.',
   ];
 
@@ -146,7 +149,7 @@ export function generateBulkDownloadScripts(tracks: Track[], libraryName = 'Bibl
 
   batLines.push('echo.');
   batLines.push('echo ========================================================');
-  batLines.push('echo [EXITO] Todas las canciones completas se han descargado.');
+  batLines.push(`echo [EXITO] Las canciones completas de "${safeFolderName}" se descargaron.`);
   batLines.push('echo ========================================================');
   batLines.push('pause');
 
@@ -155,7 +158,8 @@ export function generateBulkDownloadScripts(tracks: Track[], libraryName = 'Bibl
     '#!/usr/bin/env bash',
     'echo "========================================================"',
     'echo "   DESCARGADOR DE CANCIONES COMPLETAS (320kbps MP3)"',
-    `echo "   Biblioteca: ${tracks.length} canciones"`,
+    `echo "   Carpeta / Playlist: ${safeFolderName}"`,
+    `echo "   Total de canciones: ${tracks.length}"`,
     'echo "========================================================"',
     'echo ""',
     'if ! command -v yt-dlp &> /dev/null; then',
@@ -164,8 +168,8 @@ export function generateBulkDownloadScripts(tracks: Track[], libraryName = 'Bibl
     '    echo "O en Linux con: sudo apt install yt-dlp / pip install yt-dlp"',
     '    exit 1',
     'fi',
-    'mkdir -p "Musica_Completa"',
-    'cd "Musica_Completa"',
+    `mkdir -p "${safeFolderName}"`,
+    `cd "${safeFolderName}"`,
   ];
 
   for (let i = 0; i < tracks.length; i++) {
@@ -177,7 +181,7 @@ export function generateBulkDownloadScripts(tracks: Track[], libraryName = 'Bibl
     );
   }
 
-  shLines.push('echo "¡Descarga completada!"');
+  shLines.push('echo "¡Descarga de la carpeta completada!"');
 
   // Plain text search list for JDownloader 2 / IDM
   const searchQueries = tracks.map((t) => `ytsearch1:${t.artist} - ${t.title}`).join('\n');

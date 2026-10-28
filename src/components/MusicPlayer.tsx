@@ -409,9 +409,9 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({
                       ? 'bg-purple-600 text-white shadow-sm'
                       : 'text-slate-400 hover:text-white'
                   }`}
-                  title="Vista previa rápida de Deezer (30 segundos)"
+                  title="Escuchar vista previa rápida de la canción"
                 >
-                  ⏱️ 30s
+                  ⚡ Preview
                 </button>
               </div>
             </div>
@@ -472,9 +472,9 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({
               type="button"
               onClick={handleDownload}
               disabled={isDownloading}
-              aria-label="Descargar canción actual en MP3"
+              aria-label="Descargar canción actual en MP3 completa"
               className="p-2 text-slate-300 hover:text-emerald-400 hover:bg-slate-800 rounded-lg transition-colors"
-              title="Descargar archivo MP3 de esta canción"
+              title="Descargar canción completa en MP3 (320kbps)"
             >
               <Download className={`w-4 h-4 ${isDownloading ? 'animate-bounce text-emerald-400' : ''}`} />
             </button>

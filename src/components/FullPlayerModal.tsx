@@ -133,8 +133,9 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
                   ? 'bg-purple-600 text-white shadow-sm'
                   : 'text-slate-400 hover:text-white'
               }`}
+              title="Escuchar vista previa rápida de la canción"
             >
-              ⏱️ 30s
+              ⚡ Escucha Rápida
             </button>
           </div>
 

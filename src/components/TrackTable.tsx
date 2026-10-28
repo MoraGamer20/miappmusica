@@ -288,7 +288,7 @@ export const TrackTable: React.FC<TrackTableProps> = ({
             className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-600/40 transition-colors font-medium shrink-0"
           >
             <FileArchive className="w-3.5 h-3.5" />
-            <span>Descargar ZIP</span>
+            <span>Descargar ZIP (Completas)</span>
           </button>
 
           {/* Mark Favorites */}
@@ -761,7 +761,7 @@ export const TrackTable: React.FC<TrackTableProps> = ({
                         onClick={() => onOpenDownloadModal(track)}
                         aria-label={`Descargar ${track.title}`}
                         className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-400 transition-colors"
-                        title="Descargar canción completa MP3 o preview"
+                        title="Descargar canción completa (MP3 320kbps)"
                       >
                         <Download className="w-4 h-4" />
                       </button>

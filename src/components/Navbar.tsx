@@ -1,4 +1,5 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Music,
   Search,
@@ -76,6 +77,17 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  useEffect(() => {
+    if (showMobileMenu) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [showMobileMenu]);
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -136,8 +148,8 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           </div>
 
-          {/* Mobile Right Controls (< sm) */}
-          <div className="flex items-center gap-1.5 sm:hidden shrink-0">
+          {/* Mobile Right Controls (< md) */}
+          <div className="flex items-center gap-1.5 md:hidden shrink-0">
             {onOpenEqualizer && (
               <button
                 type="button"
@@ -154,15 +166,16 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               type="button"
               onClick={() => setShowMobileMenu(true)}
-              className="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 text-slate-200 flex items-center justify-center active:bg-slate-700 transition-colors"
+              className="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 text-slate-200 flex items-center justify-center active:bg-slate-700 transition-colors shadow-sm"
               aria-label="Menú de opciones"
+              title="Abrir menú"
             >
-              <Menu className="w-4 h-4" />
+              <Menu className="w-5 h-5 text-slate-200" />
             </button>
           </div>
 
-          {/* Desktop Action Buttons (sm and up) */}
-          <div className="hidden sm:flex items-center gap-2 shrink-0">
+          {/* Desktop Action Buttons (md and up) */}
+          <div className="hidden md:flex items-center gap-2 shrink-0">
             {/* Download by Folder Button */}
             {onOpenFolderDownloadModal && (
               <button
@@ -392,14 +405,19 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       </div>
 
-      {/* Mobile Drawer Menu Sheet */}
-      {showMobileMenu && (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/70 backdrop-blur-sm sm:hidden">
-          <div
-            className="flex-1"
-            onClick={() => setShowMobileMenu(false)}
-          />
-          <div className="bg-slate-900 border-t border-slate-800 rounded-t-3xl max-h-[85vh] overflow-y-auto p-4 space-y-3 pb-safe shadow-2xl animate-in slide-in-from-bottom duration-200">
+      {/* Mobile Drawer Menu Sheet via Portal to escape sticky/backdrop-blur stacking context */}
+      {showMobileMenu &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div className="fixed inset-0 z-[9999] flex flex-col justify-end bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+            <div
+              className="flex-1"
+              onClick={() => setShowMobileMenu(false)}
+            />
+            <div
+              className="bg-slate-900 border-t border-slate-800 rounded-t-3xl max-h-[85vh] overflow-y-auto p-4 sm:p-6 space-y-3 pb-safe shadow-2xl animate-in slide-in-from-bottom duration-200 w-full max-w-lg mx-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
             {/* Sheet Handle */}
             <div className="w-12 h-1.5 bg-slate-700 rounded-full mx-auto mb-2" />
 
@@ -625,7 +643,8 @@ export const Navbar: React.FC<NavbarProps> = ({
               <PWAInstallButton variant="sidebar" />
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </header>
   );

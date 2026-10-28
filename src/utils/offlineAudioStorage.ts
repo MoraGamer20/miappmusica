@@ -72,9 +72,9 @@ export async function saveOfflineAudio(track: Track, audioBlob: Blob): Promise<v
 }
 
 /**
- * Retrieves the stored audio blob for a track and returns an Object URL
+ * Retrieves the stored audio blob for a track
  */
-export async function getOfflineAudioUrl(trackId: string): Promise<string | null> {
+export async function getOfflineAudioBlob(trackId: string): Promise<Blob | null> {
   try {
     const db = await getDB();
     return await new Promise((resolve, reject) => {
@@ -85,8 +85,7 @@ export async function getOfflineAudioUrl(trackId: string): Promise<string | null
       req.onsuccess = () => {
         const record = req.result as OfflineTrackRecord | undefined;
         if (record && record.audioBlob) {
-          const url = URL.createObjectURL(record.audioBlob);
-          resolve(url);
+          resolve(record.audioBlob);
         } else {
           resolve(null);
         }
@@ -94,6 +93,21 @@ export async function getOfflineAudioUrl(trackId: string): Promise<string | null
 
       req.onerror = () => reject(req.error);
     });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Retrieves the stored audio blob for a track and returns an Object URL
+ */
+export async function getOfflineAudioUrl(trackId: string): Promise<string | null> {
+  try {
+    const blob = await getOfflineAudioBlob(trackId);
+    if (blob) {
+      return URL.createObjectURL(blob);
+    }
+    return null;
   } catch {
     return null;
   }
