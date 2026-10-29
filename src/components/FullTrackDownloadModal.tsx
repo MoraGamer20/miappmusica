@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   Download,
@@ -10,11 +10,14 @@ import {
   HardDrive,
   Loader2,
   FolderDown,
+  ExternalLink,
+  Upload,
+  Music,
 } from 'lucide-react';
 import { Track } from '../types/music';
-import { downloadTrackAudio } from '../utils/downloadHelper';
 import { saveOfflineAudio, isTrackOffline, getOfflineAudioBlob } from '../utils/offlineAudioStorage';
-import { getTrackDetails } from '../utils/deezerService';
+import { getFullTrackVideoId, getFullDownloadLinks } from '../utils/fullAudioService';
+import { triggerFileDownload } from '../utils/downloadHelper';
 
 interface FullTrackDownloadModalProps {
   isOpen: boolean;
@@ -31,97 +34,76 @@ export const FullTrackDownloadModal: React.FC<FullTrackDownloadModalProps> = ({
   onOpenBulkDownloadModal,
   onTrackSavedOffline,
 }) => {
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [downloadSuccess, setDownloadSuccess] = useState(false);
-  const [isSavingOffline, setIsSavingOffline] = useState(false);
   const [isSavedOffline, setIsSavedOffline] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
+  const [videoId, setVideoId] = useState<string | null>(null);
+  const [isLoadingVideoId, setIsLoadingVideoId] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Check if track is already offline
-  React.useEffect(() => {
+  // Check if track is already offline and resolve full video ID
+  useEffect(() => {
     if (track && isOpen) {
-      setDownloadSuccess(false);
       setStatusMessage('');
       isTrackOffline(track.id).then((saved) => setIsSavedOffline(saved));
+      setIsLoadingVideoId(true);
+      getFullTrackVideoId(track).then((vid) => {
+        setVideoId(vid);
+        setIsLoadingVideoId(false);
+      });
     }
   }, [track, isOpen]);
 
   if (!isOpen || !track) return null;
 
+  const links = getFullDownloadLinks(track, videoId);
+
   const formatDuration = (secs?: number) => {
-    if (!secs || secs <= 30) return 'Completa (3-5 min)';
+    if (!secs || secs <= 30) return 'Canción Completa (3-5 min)';
     const m = Math.floor(secs / 60);
     const s = Math.floor(secs % 60);
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
-  // Direct MP3 file download (no external spam redirects)
-  const handleDirectDownload = async () => {
-    setIsDownloading(true);
-    setStatusMessage('Descargando archivo MP3 a tu dispositivo...');
+  // Handle local MP3 file attach for full offline playback in the app
+  const handleFileAttach = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
     try {
-      const ok = await downloadTrackAudio(track);
-      if (ok) {
-        setDownloadSuccess(true);
-        setStatusMessage('¡Archivo MP3 descargado con éxito!');
-        setIsSavedOffline(true);
-        onTrackSavedOffline?.(track.id);
-      } else {
-        setStatusMessage('Iniciando descarga alternativa...');
-      }
+      setStatusMessage('Guardando canción completa en memoria...');
+      await saveOfflineAudio(track, file);
+      setIsSavedOffline(true);
+      onTrackSavedOffline?.(track.id);
+      setStatusMessage('¡Canción completa guardada para escuchar sin conexión!');
     } catch {
-      setStatusMessage('Error al descargar');
-    } finally {
-      setIsDownloading(false);
+      setStatusMessage('Error al guardar archivo');
     }
   };
 
-  // Save in local device cache for offline listening
-  const handleToggleOffline = async () => {
-    setIsSavingOffline(true);
-    setStatusMessage('Guardando para escuchar sin internet...');
-    try {
-      let blob = await getOfflineAudioBlob(track.id);
-      if (!blob) {
-        let audioUrl = track.previewUrl;
-        if (!audioUrl) {
-          const details = await getTrackDetails(track);
-          audioUrl = details.previewUrl;
-        }
-        if (audioUrl) {
-          const res = await fetch(audioUrl);
-          if (res.ok) {
-            blob = await res.blob();
-          }
-        }
-      }
-
-      if (blob) {
-        await saveOfflineAudio(track, blob);
-        setIsSavedOffline(true);
-        onTrackSavedOffline?.(track.id);
-        setStatusMessage('¡Guardada para escuchar sin conexión!');
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsSavingOffline(false);
+  // If already in offline storage, allow downloading local blob
+  const handleDownloadSavedBlob = async () => {
+    const blob = await getOfflineAudioBlob(track.id);
+    if (blob) {
+      const safeArtist = (track.artist || 'Artista').replace(/[/\\?%*:|"<>]/g, '_');
+      const safeTitle = (track.title || 'Cancion').replace(/[/\\?%*:|"<>]/g, '_');
+      triggerFileDownload(blob, `${safeArtist} - ${safeTitle}.mp3`);
+      setStatusMessage('¡Archivo MP3 descargado!');
     }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3.5 sm:p-5 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-150">
-      <div className="relative w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-2xl text-slate-100 flex flex-col max-h-[92vh] overflow-y-auto">
+      <div className="relative w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-2xl text-slate-100 flex flex-col max-h-[92vh] overflow-y-auto scrollbar-none">
         {/* Header */}
         <div className="flex items-center justify-between pb-3.5 border-b border-slate-800">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white shadow-lg shadow-emerald-500/25 shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-purple-600 via-indigo-600 to-emerald-500 flex items-center justify-center text-white shadow-lg shadow-purple-500/25 shrink-0">
               <Download className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white">Descargar Canción al Celular</h3>
+              <h3 className="text-base font-bold text-white">Descargar Canción Completa</h3>
               <p className="text-xs text-emerald-400 font-semibold flex items-center gap-1">
-                <Sparkles className="w-3 h-3" /> Descarga directa MP3 • Sin publicidad
+                <Sparkles className="w-3 h-3" /> Audio completo (3-5 min) • Sin corte de 30s
               </p>
             </div>
           </div>
@@ -150,12 +132,12 @@ export const FullTrackDownloadModal: React.FC<FullTrackDownloadModalProps> = ({
             <h4 className="text-sm font-bold text-white truncate">{track.title}</h4>
             <p className="text-xs text-slate-300 truncate mt-0.5">{track.artist}</p>
             <div className="flex items-center gap-2 mt-1">
-              <span className="text-[11px] text-slate-400 flex items-center gap-1">
+              <span className="text-[11px] text-slate-400 flex items-center gap-1 font-mono">
                 <Clock className="w-3 h-3 text-slate-500" />
                 {formatDuration(track.duration)}
               </span>
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-medium border border-emerald-500/30">
-                MP3 Directo
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 font-semibold border border-purple-500/30">
+                MP3 Completo
               </span>
             </div>
           </div>
@@ -164,82 +146,112 @@ export const FullTrackDownloadModal: React.FC<FullTrackDownloadModalProps> = ({
         {/* Status message */}
         {statusMessage && (
           <div className="mb-3 p-2.5 rounded-xl bg-slate-800/80 border border-slate-700 text-xs text-emerald-300 text-center flex items-center justify-center gap-2">
-            {isDownloading || isSavingOffline ? (
-              <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
-            ) : (
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-            )}
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
             <span>{statusMessage}</span>
           </div>
         )}
 
-        {/* Primary 1-Tap Direct MP3 Download Button */}
-        <div className="space-y-3">
-          <button
-            type="button"
-            onClick={handleDirectDownload}
-            disabled={isDownloading}
-            className="w-full flex items-center justify-between p-4 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-sm shadow-xl shadow-emerald-600/30 active:scale-98 transition-all group disabled:opacity-70"
+        {/* Full Song Download Actions */}
+        <div className="space-y-2.5">
+          {/* Option 1: Direct 1-Click MP3 Download via Yout */}
+          <a
+            href={links.youtUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-sm shadow-xl shadow-purple-600/30 active:scale-98 transition-all group"
           >
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
-                {isDownloading ? (
-                  <Loader2 className="w-5 h-5 text-white animate-spin" />
-                ) : (
-                  <Download className="w-5 h-5 text-white" />
-                )}
+              <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                <Download className="w-5 h-5 text-white" />
               </div>
-              <div className="text-left">
-                <p className="text-sm font-bold text-white">
-                  {isDownloading ? 'Descargando...' : 'Descargar Archivo MP3 Directo'}
+              <div className="text-left min-w-0">
+                <p className="text-xs font-bold text-white truncate flex items-center gap-1.5">
+                  <span>Descargar MP3 Completo (1-Clic)</span>
+                  <ExternalLink className="w-3.5 h-3.5 opacity-80" />
                 </p>
-                <p className="text-[11px] text-emerald-100 font-normal">
-                  Guarda el archivo .mp3 directamente en tu celular
+                <p className="text-[10px] text-purple-200 font-normal">
+                  Descarga el archivo completo a 320kbps sin corte
                 </p>
               </div>
             </div>
-            {downloadSuccess && <CheckCircle2 className="w-5 h-5 text-emerald-200" />}
-          </button>
+          </a>
 
-          {/* Offline In-App Switch Button */}
-          <button
-            type="button"
-            onClick={handleToggleOffline}
-            disabled={isSavingOffline || isSavedOffline}
-            className={`w-full flex items-center justify-between p-3.5 rounded-2xl border transition-all active:scale-98 ${
-              isSavedOffline
-                ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300'
-                : 'bg-slate-800/80 hover:bg-slate-750 border-slate-700 text-slate-200'
-            }`}
+          {/* Option 2: Dirpy Audio Studio */}
+          <a
+            href={links.dirpyUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full flex items-center justify-between p-3 rounded-2xl bg-slate-800/90 hover:bg-slate-750 border border-slate-700 text-slate-200 font-bold text-xs active:scale-98 transition-all"
           >
             <div className="flex items-center gap-3">
-              <div
-                className={`w-9 h-9 rounded-xl flex items-center justify-center ${
-                  isSavedOffline ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-700 text-slate-300'
-                }`}
-              >
-                <HardDrive className="w-4 h-4" />
+              <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                <Music className="w-4 h-4" />
               </div>
-              <div className="text-left">
-                <p className="text-xs font-bold text-white">
-                  {isSavedOffline ? 'Guardada en Memoria Offline' : 'Guardar para escuchar sin internet'}
+              <div className="text-left min-w-0">
+                <p className="text-xs font-semibold text-white truncate flex items-center gap-1.5">
+                  <span>Descarga Alternativa con Dirpy Studio</span>
+                  <ExternalLink className="w-3 h-3 text-slate-400" />
                 </p>
-                <p className="text-[10px] text-slate-400">
-                  {isSavedOffline
-                    ? 'Lista para reproducir sin conexión a internet'
-                    : 'Permite reproducir la canción sin usar datos móviles'}
+                <p className="text-[10px] text-slate-400 font-normal">
+                  Convertidor de audio completo en alta calidad
                 </p>
               </div>
             </div>
-            {isSavedOffline && <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
+          </a>
+
+          {/* Option 3: If already saved in IndexedDB, download local blob */}
+          {isSavedOffline && (
+            <button
+              type="button"
+              onClick={handleDownloadSavedBlob}
+              className="w-full flex items-center justify-between p-3 rounded-2xl bg-emerald-950/40 border border-emerald-500/40 text-emerald-300 font-bold text-xs active:scale-98 transition-all"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-xl bg-emerald-500/20 flex items-center justify-center shrink-0 text-emerald-400">
+                  <CheckCircle2 className="w-4 h-4" />
+                </div>
+                <div className="text-left">
+                  <p className="text-xs font-bold text-white">Descargar audio guardado en la App</p>
+                  <p className="text-[10px] text-emerald-400 font-normal">
+                    Descargar el archivo .mp3 completo a tu dispositivo
+                  </p>
+                </div>
+              </div>
+            </button>
+          )}
+
+          {/* Option 4: Link / Attach local full MP3 to this track */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept="audio/*,.mp3,.m4a,.wav,.flac"
+            onChange={handleFileAttach}
+            className="hidden"
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="w-full flex items-center justify-between p-3 rounded-2xl bg-slate-800/60 hover:bg-slate-800 border border-slate-700/80 text-slate-300 text-xs transition-all active:scale-98"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-slate-700 text-slate-300 flex items-center justify-center shrink-0">
+                <Upload className="w-4 h-4 text-purple-400" />
+              </div>
+              <div className="text-left">
+                <p className="text-xs font-semibold text-white">Vincular mi archivo MP3 completo</p>
+                <p className="text-[10px] text-slate-400">
+                  Guárdalo en la app para escuchar completo sin conexión
+                </p>
+              </div>
+            </div>
           </button>
         </div>
 
-        {/* Mobile notice */}
-        <div className="mt-4 p-3 rounded-2xl bg-slate-800/40 border border-slate-700/60 flex items-start gap-2.5">
-          <Smartphone className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+        {/* Notice */}
+        <div className="mt-3.5 p-3 rounded-2xl bg-slate-800/40 border border-slate-700/60 flex items-start gap-2.5">
+          <Smartphone className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
           <p className="text-[11px] text-slate-300 leading-relaxed">
-            Sin páginas externas ni redirecciones a terceros. El archivo se descarga en formato .mp3 en la carpeta de descargas de tu teléfono o navegador.
+            Todas las descargas son de <strong>canciones completas (3-5 min)</strong>. Nunca guardamos fragmentos de 30 segundos.
           </p>
         </div>
 

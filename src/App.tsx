@@ -39,12 +39,13 @@ import { updateMediaSession, updateMediaSessionPosition } from './utils/mediaSes
 import {
   getAllOfflineTrackIds,
   getOfflineAudioUrl,
+  getOfflineAudioBlob,
   importLocalAudioFiles,
   downloadAndSavePlaylistOffline,
   removePlaylistOffline,
   saveOfflineAudio,
 } from './utils/offlineAudioStorage';
-import { downloadTrackAudio } from './utils/downloadHelper';
+import { downloadTrackAudio, triggerFileDownload } from './utils/downloadHelper';
 import defaultCsvRaw from '../public/assets/aistudio/My_Deezer_Library_e6092c00.csv?raw';
 import { Heart, Play, Shuffle, Sliders, Download, Sparkles, ListMusic, Users, Clock, RotateCcw, X, Music, HardDrive, FolderDown, Upload, Disc, Loader2 } from 'lucide-react';
 
@@ -310,91 +311,44 @@ export default function App() {
       setOfflineTrackIds(newIds);
       showToast(`Descarga sin conexión desactivada para "${isFav ? 'Favoritas ❤️' : playlistName}"`);
     } else {
-      // Turn ON immediately - runs in the background without blocking or freezing the screen!
-      cancelOfflineSyncRef.current = false;
-      setOfflineSyncProgress({
-        current: 0,
-        total: targetTracks.length,
-        trackTitle: 'Iniciando descarga local...',
-        playlistName: canonicalKey,
-        currentTrackId: undefined,
-      });
-
-      showToast(`Descargando "${isFav ? 'Favoritas ❤️' : playlistName}" en segundo plano...`);
-
-      try {
-        const savedIds = await downloadAndSavePlaylistOffline(
-          targetTracks,
-          (curr, tot, title, currTrackId) => {
-            if (!cancelOfflineSyncRef.current) {
-              setOfflineSyncProgress({
-                current: curr,
-                total: tot,
-                trackTitle: title,
-                playlistName: canonicalKey,
-                currentTrackId: currTrackId,
-              });
-            }
-          },
-          (savedTrackId) => {
-            // Real-time incremental update so the user watches the checkmarks appear one by one!
-            setOfflineTrackIds((prev) => new Set(prev).add(savedTrackId));
-          },
-          () => cancelOfflineSyncRef.current
-        );
-
-        if (!cancelOfflineSyncRef.current) {
-          const updated = {
-            ...offlinePlaylists,
-            [canonicalKey]: true,
-            ...(isFav ? { 'Favoritas': true, 'Favorite Tracks': true } : {}),
-          };
-          setOfflinePlaylists(updated);
-          try {
-            localStorage.setItem(OFFLINE_PLAYLISTS_KEY, JSON.stringify(updated));
-          } catch {}
-          const newIds = await getAllOfflineTrackIds();
-          setOfflineTrackIds(newIds);
-          showToast(`¡"${isFav ? 'Favoritas ❤️' : playlistName}" descargada para escuchar sin conexión! (${savedIds.length} canciones) 🎧`);
-        }
-      } catch (e) {
-        console.error('Error downloading playlist offline', e);
-        showToast('Error al descargar playlist para offline');
-      } finally {
-        setOfflineSyncProgress(null);
+      // Check if user already has local/offline tracks for this folder
+      const hasAnyLocal = targetTracks.some((t) => offlineTrackIds.has(t.id) || t.type === 'Local');
+      if (hasAnyLocal) {
+        const updated = {
+          ...offlinePlaylists,
+          [canonicalKey]: true,
+          ...(isFav ? { 'Favoritas': true, 'Favorite Tracks': true } : {}),
+        };
+        setOfflinePlaylists(updated);
+        try {
+          localStorage.setItem(OFFLINE_PLAYLISTS_KEY, JSON.stringify(updated));
+        } catch {}
+        showToast(`Modo offline activado para "${isFav ? 'Favoritas ❤️' : playlistName}" 🎧`);
+        return;
       }
+
+      // If full local songs are not imported yet, open the full folder download modal
+      // so the user can download the complete full-length 320kbps MP3s or import their files
+      handleOpenFolderDownload(playlistName);
+      showToast(`Opciones de descarga de canciones completas para "${isFav ? 'Favoritas ❤️' : playlistName}"`);
     }
   };
 
-  // Direct MP3 download handler without redirects - caches in IndexedDB
+  // Direct MP3 download handler: triggers full-song download or opens FullTrackDownloadModal
   const handleDirectDownloadTrack = async (track: Track) => {
-    showToast(`Guardando "${track.title}" de manera local...`);
     try {
-      let previewUrl = track.previewUrl;
-      if (!previewUrl) {
-        const details = await getTrackDetails(track);
-        previewUrl = details.previewUrl;
-      }
-      if (previewUrl) {
-        const res = await fetch(previewUrl);
-        if (res.ok) {
-          const blob = await res.blob();
-          await saveOfflineAudio(track, blob);
-          setOfflineTrackIds((prev) => new Set(prev).add(track.id));
-          showToast(`¡"${track.title}" guardada para escuchar sin conexión! 🎧`);
-          return;
-        }
+      const blob = await getOfflineAudioBlob(track.id);
+      if (blob) {
+        const safeArtist = (track.artist || 'Artista').replace(/[/\\?%*:|"<>]/g, '_');
+        const safeTitle = (track.title || 'Cancion').replace(/[/\\?%*:|"<>]/g, '_');
+        triggerFileDownload(blob, `${safeArtist} - ${safeTitle}.mp3`);
+        showToast(`Descargando "${track.title}" completa...`);
+        return;
       }
     } catch {}
 
-    const ok = await downloadTrackAudio(track);
-    if (ok) {
-      showToast(`¡"${track.title}" descargada con éxito!`);
-      const newIds = await getAllOfflineTrackIds();
-      setOfflineTrackIds(newIds);
-    } else {
-      setDownloadModalTrack(track);
-    }
+    // Open FullTrackDownloadModal for full-song MP3 portals (yout.com, dirpy.com, etc.)
+    setDownloadModalTrack(track);
   };
 
   // Save custom playlists
