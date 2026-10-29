@@ -51,24 +51,46 @@ export function downloadTracksAsJSON(tracks: Track[], filename = 'Biblioteca_Can
 }
 
 /**
- * Downloads the MP3 audio for a track directly to the device and caches it offline.
- * Never redirects to external URLs or ad portals.
+ * Downloads the complete MP3 audio (320 kbps) for a track directly to the device.
+ * Prioritizes the user's running MusicGrabber server (app.py) for full 3-5 minute 320 kbps songs.
+ * NEVER downloads 469 KB previews or synthetic tones.
  */
 export async function downloadTrackAudio(track: Track): Promise<boolean> {
   try {
-    let blob = await getOfflineAudioBlob(track.id);
-    if (!blob) {
-      blob = await fetchOrGenerateTrackAudioBlob(track);
-      if (blob) {
-        await saveOfflineAudio(track, blob);
-      }
-    }
-    if (blob) {
-      const safeArtist = (track.artist || 'Artista').replace(/[/\\?%*:|"<>]/g, '_');
-      const safeTitle = (track.title || 'Cancion').replace(/[/\\?%*:|"<>]/g, '_');
-      triggerFileDownload(blob, `${safeArtist} - ${safeTitle}.mp3`);
+    // 1. Try direct 320 kbps download from running MusicGrabber server
+    const { triggerMusicGrabberDirectDownload, fetchFullSongFromMusicGrabber } = await import(
+      './musicGrabberBridge'
+    );
+    const mgResult = await triggerMusicGrabberDirectDownload(track);
+    if (mgResult.success) {
+      // In background, cache full song blob to IndexedDB for offline player
+      fetchFullSongFromMusicGrabber(track).then((blob) => {
+        if (blob && blob.size > 1000000) {
+          saveOfflineAudio(track, blob).catch(() => {});
+        }
+      });
       return true;
     }
+
+    // 2. Check if a real full audio blob is already saved in IndexedDB (> 1MB)
+    const existingBlob = await getOfflineAudioBlob(track.id);
+    if (existingBlob && existingBlob.size > 1000000) {
+      const safeArtist = (track.artist || 'Artista').replace(/[/\\?%*:|"<>]/g, '_');
+      const safeTitle = (track.title || 'Cancion').replace(/[/\\?%*:|"<>]/g, '_');
+      triggerFileDownload(existingBlob, `${safeArtist} - ${safeTitle}.mp3`);
+      return true;
+    }
+
+    // 3. Try fetching full audio blob from storage/bridge (strictly > 1MB)
+    const fullBlob = await fetchOrGenerateTrackAudioBlob(track, false);
+    if (fullBlob && fullBlob.size > 1000000) {
+      await saveOfflineAudio(track, fullBlob);
+      const safeArtist = (track.artist || 'Artista').replace(/[/\\?%*:|"<>]/g, '_');
+      const safeTitle = (track.title || 'Cancion').replace(/[/\\?%*:|"<>]/g, '_');
+      triggerFileDownload(fullBlob, `${safeArtist} - ${safeTitle}.mp3`);
+      return true;
+    }
+
     return false;
   } catch (err) {
     console.error('Failed to download single track audio', err);

@@ -429,21 +429,33 @@ export default function App() {
     }
   };
 
-  // Direct MP3 download handler: triggers full-song download directly to device and stores offline (Zero external redirects)
+  // Direct MP3 download handler: mobile-first, zero PC/.bat dependencies
   const handleDirectDownloadTrack = async (track: Track) => {
-    showToast(`Descargando "${track.title}" al móvil...`);
     try {
+      // 1. If already saved offline in IndexedDB, download the file directly to phone/device!
+      const existingBlob = await getOfflineAudioBlob(track.id);
+      if (existingBlob && existingBlob.size > 500000) {
+        const safeArtist = (track.artist || 'Artista').replace(/[/\\?%*:|"<>]/g, '_');
+        const safeTitle = (track.title || 'Cancion').replace(/[/\\?%*:|"<>]/g, '_');
+        triggerFileDownload(existingBlob, `${safeArtist} - ${safeTitle}.mp3`);
+        showToast(`¡Descargando archivo guardado de "${track.title}" a tu celular! 🎧`);
+        return;
+      }
+
+      // 2. Try download helper
       const ok = await downloadTrackAudio(track);
       if (ok) {
         const newIds = await getAllOfflineTrackIds();
         setOfflineTrackIds(newIds);
-        showToast(`¡"${track.title}" descargada en el móvil y lista para offline! 🎧`);
+        showToast(`¡"${track.title}" descargada a tu celular y lista para offline! 🎧`);
         return;
       }
     } catch (e) {
-      console.error('Error direct download', e);
+      console.warn('Direct download attempt finished', e);
     }
-    showToast(`No se pudo descargar "${track.title}"`);
+
+    // 3. For mobile Chrome / PWA users: Open the dedicated mobile download sheet/modal
+    setDownloadModalTrack(track);
   };
 
   // Save custom playlists
@@ -578,27 +590,19 @@ export default function App() {
           .then(() => {
             setIsPlaying(true);
           })
-          .catch(() => {
-            synthStopRef.current = playSynthesizedPreview(
-              track.title,
-              track.artist,
-              () => handleNextTrack(),
-              (curr, dur) => {
-                setCurrentTime(curr);
-                setDuration(dur);
-              }
-            );
+          .catch(async () => {
+            const vid = await getFullTrackVideoId(track);
+            if (vid) {
+              setActiveVideoId(vid);
+              setIsPlaying(true);
+            }
           });
       } else {
-        synthStopRef.current = playSynthesizedPreview(
-          track.title,
-          track.artist,
-          () => handleNextTrack(),
-          (curr, dur) => {
-            setCurrentTime(curr);
-            setDuration(dur);
-          }
-        );
+        const vid = await getFullTrackVideoId(track);
+        if (vid) {
+          setActiveVideoId(vid);
+          setIsPlaying(true);
+        }
       }
     },
     [volume, isMuted, playbackSource]
@@ -651,16 +655,7 @@ export default function App() {
         audioRef.current.play().catch(() => {});
         setIsPlaying(true);
       } else {
-        synthStopRef.current = playSynthesizedPreview(
-          currentTrack.title,
-          currentTrack.artist,
-          () => handleNextTrack(),
-          (curr, dur) => {
-            setCurrentTime(curr);
-            setDuration(dur);
-          }
-        );
-        setIsPlaying(true);
+        playTrackDirect(currentTrack);
       }
     }
   };
@@ -763,17 +758,16 @@ export default function App() {
     };
 
     const onError = () => {
-      console.warn('Audio playback error, falling back to melodic synthesizer');
+      console.warn('Audio playback error, switching to official audio stream');
       if (currentTrack) {
-        synthStopRef.current = playSynthesizedPreview(
-          currentTrack.title,
-          currentTrack.artist,
-          () => handleNextTrack(),
-          (curr, dur) => {
-            setCurrentTime(curr);
-            setDuration(dur);
+        getFullTrackVideoId(currentTrack).then((vid) => {
+          if (vid) {
+            setActiveVideoId(vid);
+            setIsPlaying(true);
+          } else {
+            handleNextTrack();
           }
-        );
+        });
       }
     };
 

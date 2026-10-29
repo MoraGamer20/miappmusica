@@ -1,5 +1,6 @@
 import { Track } from '../types/music';
 import { getTrackDetails } from './deezerService';
+import { fetchFullSongFromMusicGrabber } from './musicGrabberBridge';
 
 const DB_NAME = 'deezer_offline_audio_db';
 const DB_VERSION = 1;
@@ -300,22 +301,50 @@ export function audioBufferToWavBlob(buffer: AudioBuffer): Blob {
 }
 
 /**
- * Retrieves the genuine audio Blob for a track:
- * 1. Returns local user-uploaded or cached full MP3 if available.
- * 2. Fetches the artist's real audio stream from Deezer.
- * NEVER synthesizes artificial tones, bleeps, or Minecraft-like chimes.
+ * Retrieves the genuine full audio Blob (320 kbps) for a track:
+ * 1. Returns cached full MP3 (> 1MB) or local user-uploaded file.
+ * 2. Fetches complete 320 kbps audio from user's running MusicGrabber server.
+ * NEVER returns cut 469 KB previews or synthetic tones.
  */
-export async function fetchOrGenerateTrackAudioBlob(track: Track): Promise<Blob | null> {
+export async function fetchFullTrackAudioBlob(track: Track): Promise<Blob | null> {
   const cached = await getOfflineAudioBlob(track.id);
-  if (cached) {
+  // Verify it is a real song (> 1MB), not a 469KB preview
+  if (cached && cached.size > 1000000) {
     return cached;
   }
 
   // If local user-uploaded MP3 file:
-  if (track.type === 'Local' && cached) {
+  if (track.type === 'Local' && cached && cached.size > 500000) {
     return cached;
   }
 
+  // Try fetching full 320 kbps audio from user's running MusicGrabber server
+  try {
+    const fullBlob = await fetchFullSongFromMusicGrabber(track);
+    if (fullBlob && fullBlob.size > 1000000) {
+      await saveOfflineAudio(track, fullBlob);
+      return fullBlob;
+    }
+  } catch {}
+
+  return null;
+}
+
+/**
+ * Legacy wrapper: calls fetchFullTrackAudioBlob first, and only allows preview if explicitly allowed
+ */
+export async function fetchOrGenerateTrackAudioBlob(
+  track: Track,
+  allowPreview = false
+): Promise<Blob | null> {
+  const full = await fetchFullTrackAudioBlob(track);
+  if (full) return full;
+
+  if (!allowPreview) {
+    return null;
+  }
+
+  // Only if preview explicitly allowed (for in-app 30s preview cache only)
   let previewUrl = track.previewUrl;
   if (!previewUrl) {
     try {

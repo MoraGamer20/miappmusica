@@ -26,12 +26,39 @@ export default async function handler(req, res) {
       }
     );
     const text = await response.text();
-    const match = text.match(/"videoId":"([a-zA-Z0-9_-]{11})"/);
-    const videoId = match ? match[1] : null;
+    let videoId = null;
+    let videoTitle = null;
+    let durationText = null;
+    let channelName = null;
+
+    const jsonMatch = text.match(/var ytInitialData = ({.*?});<\/script>/);
+    if (jsonMatch) {
+      try {
+        const data = JSON.parse(jsonMatch[1]);
+        const contents =
+          data.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer
+            ?.contents?.[0]?.itemSectionRenderer?.contents;
+        const firstVideo = contents?.find((c) => c.videoRenderer)?.videoRenderer;
+        if (firstVideo) {
+          videoId = firstVideo.videoId || null;
+          videoTitle = firstVideo.title?.runs?.[0]?.text || null;
+          durationText = firstVideo.lengthText?.simpleText || null;
+          channelName = firstVideo.ownerText?.runs?.[0]?.text || null;
+        }
+      } catch {}
+    }
+
+    if (!videoId) {
+      const match = text.match(/"videoId":"([a-zA-Z0-9_-]{11})"/);
+      videoId = match ? match[1] : null;
+    }
 
     return res.status(200).json({
       videoId,
       query,
+      title: videoTitle,
+      duration: durationText,
+      channel: channelName,
       youtubeUrl: videoId ? `https://www.youtube.com/watch?v=${videoId}` : null,
     });
   } catch (err) {

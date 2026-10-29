@@ -87,6 +87,54 @@ export async function getFullTrackVideoId(track: Track): Promise<string | null> 
   return null;
 }
 
+export interface FullTrackDetails {
+  videoId: string | null;
+  title: string;
+  duration?: string;
+  channel?: string;
+  youtubeUrl: string;
+  directDownloadUrl: string;
+  backupDownloadUrl: string;
+}
+
+/**
+ * Resolves full-length track details (videoId, verified duration, clean title)
+ */
+export async function getFullTrackDetails(track: Track): Promise<FullTrackDetails> {
+  const videoId = await getFullTrackVideoId(track);
+  const cacheKey = `${track.title.toLowerCase().trim()}::${track.artist.toLowerCase().trim()}`;
+  
+  // Try retrieving cached metadata or query endpoint
+  let resolvedTitle = `${track.artist} - ${track.title}`;
+  let duration: string | undefined = undefined;
+  let channel: string | undefined = track.artist;
+
+  try {
+    const query = encodeURIComponent(`${track.artist} ${track.title} audio official`);
+    const res = await fetch(`/api/full-audio/search?q=${query}`, {
+      signal: AbortSignal.timeout(3500),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.title) resolvedTitle = data.title;
+      if (data.duration) duration = data.duration;
+      if (data.channel) channel = data.channel;
+    }
+  } catch {}
+
+  const ytUrl = videoId ? `https://www.youtube.com/watch?v=${videoId}` : `https://www.youtube.com/results?search_query=${encodeURIComponent(`${track.artist} ${track.title}`)}`;
+  
+  return {
+    videoId,
+    title: resolvedTitle,
+    duration,
+    channel,
+    youtubeUrl: ytUrl,
+    directDownloadUrl: videoId ? `https://yout.com/video/${videoId}` : `https://yout.com/`,
+    backupDownloadUrl: `https://dirpy.com/studio?url=${encodeURIComponent(ytUrl)}`,
+  };
+}
+
 /**
  * Generates direct full-song download portals and 1-click links for mobile.
  */
@@ -99,6 +147,7 @@ export function getFullDownloadLinks(track: Track, videoId: string | null) {
     cobaltUrl: `https://cobalt.tools/`,
     youtUrl: videoId ? `https://yout.com/video/${videoId}` : `https://yout.com/`,
     dirpyUrl: `https://dirpy.com/studio?url=${encodeURIComponent(ytUrl)}`,
+    ezmp3Url: videoId ? `https://ezmp3.cc/` : `https://ezmp3.cc/`,
   };
 }
 

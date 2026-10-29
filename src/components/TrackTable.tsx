@@ -437,7 +437,7 @@ export const TrackTable: React.FC<TrackTableProps> = ({
       {/* =========================================================================
           CONTROLS TOOLBAR: Opaque background, no conflicting sticky offsets or blurs
           ========================================================================= */}
-      <div className="flex items-center justify-between gap-2 px-3.5 sm:px-6 py-2.5 sm:py-3 border-b border-slate-800/90 bg-slate-950 sticky top-0 md:top-16 z-20 w-full max-w-full">
+      <div className="flex items-center justify-between gap-2 px-3.5 sm:px-6 py-2.5 sm:py-3 border-b border-slate-800/90 bg-slate-950 sticky top-14 md:top-16 z-20 w-full max-w-full">
         {/* Left: Select All / Count info */}
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           {/* Mobile Select Mode Toggle */}

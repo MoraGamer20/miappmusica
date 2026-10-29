@@ -176,6 +176,35 @@ export const BulkLibraryDownloadModal: React.FC<BulkLibraryDownloadModalProps> =
             <Download className="w-4 h-4 text-indigo-400 shrink-0" />
           </button>
 
+          <button
+            type="button"
+            onClick={async () => {
+              const { copyTracksForMusicGrabber } = await import('../utils/musicGrabberBridge');
+              const ok = await copyTracksForMusicGrabber(targetTracks);
+              if (ok) {
+                setZipFinished(true);
+              }
+            }}
+            className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-emerald-950/40 hover:bg-emerald-900/50 border border-emerald-500/40 text-left active:scale-98 transition-all group"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-300 flex items-center justify-center shrink-0">
+                <Sparkles className="w-5 h-5 text-emerald-400" />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-white group-hover:text-emerald-300">
+                  Copiar lista para MusicGrabber PC (320 kbps)
+                </p>
+                <p className="text-[10px] text-emerald-300/80">
+                  Pégala en tu app de PC para descargar las {targetTracks.length} canciones completas
+                </p>
+              </div>
+            </div>
+            <span className="text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded">
+              320 kbps
+            </span>
+          </button>
+
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
