@@ -17,7 +17,7 @@ import {
 import { Track } from '../types/music';
 import { saveOfflineAudio, isTrackOffline, getOfflineAudioBlob } from '../utils/offlineAudioStorage';
 import { getFullTrackVideoId, getFullDownloadLinks } from '../utils/fullAudioService';
-import { triggerFileDownload } from '../utils/downloadHelper';
+import { triggerFileDownload, downloadTrackAudio } from '../utils/downloadHelper';
 
 interface FullTrackDownloadModalProps {
   isOpen: boolean;
@@ -153,51 +153,36 @@ export const FullTrackDownloadModal: React.FC<FullTrackDownloadModalProps> = ({
 
         {/* Full Song Download Actions */}
         <div className="space-y-2.5">
-          {/* Option 1: Direct 1-Click MP3 Download via Yout */}
-          <a
-            href={links.youtUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-sm shadow-xl shadow-purple-600/30 active:scale-98 transition-all group"
+          {/* Option 1: Direct 1-Click MP3 Download to Device */}
+          <button
+            type="button"
+            onClick={async () => {
+              setStatusMessage('Descargando archivo MP3 a tu dispositivo...');
+              const ok = await downloadTrackAudio(track);
+              if (ok) {
+                setIsSavedOffline(true);
+                onTrackSavedOffline?.(track.id);
+                setStatusMessage('¡Archivo MP3 descargado y guardado para offline! 🎧');
+              } else {
+                setStatusMessage('Error al generar la descarga');
+              }
+            }}
+            className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 hover:brightness-110 text-white font-bold text-sm shadow-xl shadow-emerald-600/30 active:scale-98 transition-all"
           >
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
                 <Download className="w-5 h-5 text-white" />
               </div>
               <div className="text-left min-w-0">
-                <p className="text-xs font-bold text-white truncate flex items-center gap-1.5">
-                  <span>Descargar MP3 Completo (1-Clic)</span>
-                  <ExternalLink className="w-3.5 h-3.5 opacity-80" />
+                <p className="text-xs font-bold text-white truncate">
+                  Descargar Archivo MP3 Directo al Celular
                 </p>
-                <p className="text-[10px] text-purple-200 font-normal">
-                  Descarga el archivo completo a 320kbps sin corte
-                </p>
-              </div>
-            </div>
-          </a>
-
-          {/* Option 2: Dirpy Audio Studio */}
-          <a
-            href={links.dirpyUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-full flex items-center justify-between p-3 rounded-2xl bg-slate-800/90 hover:bg-slate-750 border border-slate-700 text-slate-200 font-bold text-xs active:scale-98 transition-all"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
-                <Music className="w-4 h-4" />
-              </div>
-              <div className="text-left min-w-0">
-                <p className="text-xs font-semibold text-white truncate flex items-center gap-1.5">
-                  <span>Descarga Alternativa con Dirpy Studio</span>
-                  <ExternalLink className="w-3 h-3 text-slate-400" />
-                </p>
-                <p className="text-[10px] text-slate-400 font-normal">
-                  Convertidor de audio completo en alta calidad
+                <p className="text-[10px] text-emerald-100 font-normal">
+                  Descarga el archivo a tu dispositivo y lo guarda para escuchar sin internet
                 </p>
               </div>
             </div>
-          </a>
+          </button>
 
           {/* Option 3: If already saved in IndexedDB, download local blob */}
           {isSavedOffline && (

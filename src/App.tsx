@@ -362,54 +362,70 @@ export default function App() {
       setOfflineTrackIds(newIds);
       showToast(`Descarga sin conexión desactivada para "${isFav ? 'Favoritas ❤️' : playlistName}"`);
     } else {
-      // Check if user already has local/offline tracks for this folder
-      const hasAnyLocal = targetTracks.some((t) => offlineTrackIds.has(t.id) || t.type === 'Local');
-      if (hasAnyLocal) {
-        const updated = {
-          ...offlinePlaylists,
-          [canonicalKey]: true,
-          ...(isFav ? { 'Favoritas': true, 'Favorite Tracks': true } : {}),
-        };
-        setOfflinePlaylists(updated);
-        try {
-          localStorage.setItem(OFFLINE_PLAYLISTS_KEY, JSON.stringify(updated));
-        } catch {}
-        showToast(`Modo offline activado para "${isFav ? 'Favoritas ❤️' : playlistName}" 🎧`);
-        return;
-      }
+      // TURN ON: Immediately start background download with live progress bar and zero prompts!
+      cancelOfflineSyncRef.current = false;
+      const updated = {
+        ...offlinePlaylists,
+        [canonicalKey]: true,
+        ...(isFav ? { 'Favoritas': true, 'Favorite Tracks': true } : {}),
+      };
+      setOfflinePlaylists(updated);
+      try {
+        localStorage.setItem(OFFLINE_PLAYLISTS_KEY, JSON.stringify(updated));
+      } catch {}
 
-      // If full local songs are not imported yet, open the full folder download modal
-      // so the user can download the complete full-length 320kbps MP3s or import their files
-      handleOpenFolderDownload(playlistName);
-      showToast(`Opciones de descarga de canciones completas para "${isFav ? 'Favoritas ❤️' : playlistName}"`);
+      setOfflineSyncProgress({
+        current: 0,
+        total: targetTracks.length,
+        trackTitle: 'Iniciando descarga en segundo plano...',
+        playlistName: canonicalKey,
+      });
+
+      try {
+        await downloadAndSavePlaylistOffline(
+          targetTracks,
+          (curr, tot, title, trackId) => {
+            setOfflineSyncProgress({
+              current: curr,
+              total: tot,
+              trackTitle: title,
+              playlistName: canonicalKey,
+              currentTrackId: trackId,
+            });
+          },
+          (savedTrackId) => {
+            setOfflineTrackIds((prev) => new Set([...prev, savedTrackId]));
+          },
+          () => cancelOfflineSyncRef.current
+        );
+
+        const newIds = await getAllOfflineTrackIds();
+        setOfflineTrackIds(newIds);
+        showToast(`¡"${isFav ? 'Favoritas ❤️' : playlistName}" descargada para escuchar sin conexión! 🎧`);
+      } catch (e) {
+        console.error('Error downloading playlist offline', e);
+        showToast('Error al descargar canciones para offline');
+      } finally {
+        setOfflineSyncProgress(null);
+      }
     }
   };
 
-  // Direct MP3 download handler: triggers full-song download directly without intermediate modal
+  // Direct MP3 download handler: triggers full-song download directly to device and stores offline (Zero external redirects)
   const handleDirectDownloadTrack = async (track: Track) => {
+    showToast(`Descargando "${track.title}" al móvil...`);
     try {
-      const blob = await getOfflineAudioBlob(track.id);
-      if (blob) {
-        const safeArtist = (track.artist || 'Artista').replace(/[/\\?%*:|"<>]/g, '_');
-        const safeTitle = (track.title || 'Cancion').replace(/[/\\?%*:|"<>]/g, '_');
-        triggerFileDownload(blob, `${safeArtist} - ${safeTitle}.mp3`);
-        showToast(`Descargando "${track.title}" completa...`);
+      const ok = await downloadTrackAudio(track);
+      if (ok) {
+        const newIds = await getAllOfflineTrackIds();
+        setOfflineTrackIds(newIds);
+        showToast(`¡"${track.title}" descargada en el móvil y lista para offline! 🎧`);
         return;
       }
-    } catch {}
-
-    // Resolve direct download without showing intermediate link modal
-    showToast(`Iniciando descarga directa de "${track.title}"...`);
-    try {
-      const vid = await getFullTrackVideoId(track);
-      if (vid) {
-        window.open(`https://yout.com/video/${vid}`, '_blank');
-        return;
-      }
-    } catch {}
-
-    const query = encodeURIComponent(`${track.artist} ${track.title}`);
-    window.open(`https://dirpy.com/studio?url=https://www.youtube.com/results?search_query=${query}`, '_blank');
+    } catch (e) {
+      console.error('Error direct download', e);
+    }
+    showToast(`No se pudo descargar "${track.title}"`);
   };
 
   // Save custom playlists
@@ -1424,6 +1440,11 @@ export default function App() {
                 )}
                 onToggleFolderOffline={handleTogglePlaylistOffline}
                 offlineSyncProgress={offlineSyncProgress}
+                onCancelOfflineSync={() => {
+                  cancelOfflineSyncRef.current = true;
+                  setOfflineSyncProgress(null);
+                  showToast('Descarga detenida');
+                }}
                 onDirectDownloadTrack={handleDirectDownloadTrack}
                 onOpenFolderDownloadModal={(folder) => handleOpenFolderDownload(folder || activePlaylist)}
                 onImportLocalAudio={() => localAudioInputRef.current?.click()}
@@ -1823,58 +1844,6 @@ export default function App() {
         isComplete={batchDownloadState.isComplete}
       />
 
-      {/* Non-blocking Background Offline Download Floating Pill (Never blocks, locks, or freezes the UI) */}
-      {offlineSyncProgress && (
-        <div className="fixed top-18 right-3 sm:right-6 z-40 max-w-xs sm:max-w-sm w-full bg-slate-900/98 border border-emerald-500/50 rounded-2xl p-3.5 shadow-2xl backdrop-blur-2xl animate-in slide-in-from-top-3 duration-200 text-left">
-          <div className="flex items-center justify-between gap-2 mb-2">
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
-                <Loader2 className="w-4 h-4 animate-spin" />
-              </div>
-              <div className="min-w-0">
-                <h4 className="text-xs font-bold text-white truncate">
-                  Descargando en segundo plano
-                </h4>
-                <p className="text-[10px] text-emerald-400 font-semibold truncate">
-                  Carpeta: {offlineSyncProgress.playlistName}
-                </p>
-              </div>
-            </div>
-            {/* Cancel/Stop button */}
-            <button
-              type="button"
-              onClick={() => {
-                cancelOfflineSyncRef.current = true;
-                setOfflineSyncProgress(null);
-                showToast('Descarga en segundo plano pausada');
-              }}
-              className="p-1 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors text-xs font-semibold shrink-0"
-              title="Detener descarga en segundo plano"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-
-          <p className="text-[11px] text-slate-300 truncate mb-2 font-medium">
-            {offlineSyncProgress.trackTitle}
-          </p>
-
-          {/* Mini Progress Bar */}
-          <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden mb-1.5 border border-slate-700/60">
-            <div
-              className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full transition-all duration-200 rounded-full"
-              style={{
-                width: `${Math.round((offlineSyncProgress.current / Math.max(1, offlineSyncProgress.total)) * 100)}%`,
-              }}
-            />
-          </div>
-
-          <div className="flex justify-between text-[10px] text-slate-400 font-mono">
-            <span>{offlineSyncProgress.current} de {offlineSyncProgress.total} canciones</span>
-            <span>{Math.round((offlineSyncProgress.current / Math.max(1, offlineSyncProgress.total)) * 100)}%</span>
-          </div>
-        </div>
-      )}
 
       {/* Interactive Toast Notifications */}
       {toastMessage && (

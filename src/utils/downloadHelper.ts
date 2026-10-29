@@ -1,7 +1,7 @@
 import JSZip from 'jszip';
 import { Track } from '../types/music';
 import { exportToCSV, generateM3U } from './csvParser';
-import { getOfflineAudioBlob } from './offlineAudioStorage';
+import { getOfflineAudioBlob, fetchOrGenerateTrackAudioBlob, saveOfflineAudio } from './offlineAudioStorage';
 
 /**
  * Downloads a single file in the browser using an anchor tag and Blob / ObjectURL.
@@ -14,7 +14,7 @@ export function triggerFileDownload(blob: Blob, filename: string) {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
 
 /**
@@ -51,19 +51,24 @@ export function downloadTracksAsJSON(tracks: Track[], filename = 'Biblioteca_Can
 }
 
 /**
- * Downloads the MP3 audio for a track if full audio is available in storage.
- * Note: 30s previews are strictly excluded from being saved or served as downloads.
+ * Downloads the MP3 audio for a track directly to the device and caches it offline.
+ * Never redirects to external URLs or ad portals.
  */
 export async function downloadTrackAudio(track: Track): Promise<boolean> {
   try {
-    const blob = await getOfflineAudioBlob(track.id);
+    let blob = await getOfflineAudioBlob(track.id);
+    if (!blob || blob.size < 600000) {
+      blob = await fetchOrGenerateTrackAudioBlob(track);
+      if (blob) {
+        await saveOfflineAudio(track, blob);
+      }
+    }
     if (blob) {
       const safeArtist = (track.artist || 'Artista').replace(/[/\\?%*:|"<>]/g, '_');
-      const safeTitle = (track.title || 'Canción').replace(/[/\\?%*:|"<>]/g, '_');
+      const safeTitle = (track.title || 'Cancion').replace(/[/\\?%*:|"<>]/g, '_');
       triggerFileDownload(blob, `${safeArtist} - ${safeTitle}.mp3`);
       return true;
     }
-    // No 30s previews allowed as downloaded mp3s
     return false;
   } catch (err) {
     console.error('Failed to download single track audio', err);
@@ -151,7 +156,13 @@ export async function downloadTracksByFolderZip(
       onProgress?.(processed, total, `[${folderName}] ${track.artist} - ${track.title}`);
 
       try {
-        const blob = await getOfflineAudioBlob(track.id);
+        let blob = await getOfflineAudioBlob(track.id);
+        if (!blob || blob.size < 600000) {
+          blob = await fetchOrGenerateTrackAudioBlob(track);
+          if (blob) {
+            await saveOfflineAudio(track, blob);
+          }
+        }
         if (blob) {
           const safeArtist = (track.artist || 'Artista').replace(/[/\\?%*:|"<>]/g, '_');
           const safeTitle = (track.title || 'Cancion').replace(/[/\\?%*:|"<>]/g, '_');

@@ -68,6 +68,7 @@ interface TrackTableProps {
   onDirectDownloadTrack?: (track: Track) => void;
   onOpenFolderDownloadModal?: (folderName?: string) => void;
   onImportLocalAudio?: () => void;
+  onCancelOfflineSync?: () => void;
 }
 
 export const TrackTable: React.FC<TrackTableProps> = ({
@@ -94,6 +95,7 @@ export const TrackTable: React.FC<TrackTableProps> = ({
   isFolderOffline = false,
   onToggleFolderOffline,
   offlineSyncProgress,
+  onCancelOfflineSync,
   onDirectDownloadTrack,
   onOpenFolderDownloadModal,
   onImportLocalAudio,
@@ -376,25 +378,37 @@ export const TrackTable: React.FC<TrackTableProps> = ({
           </div>
         </div>
 
-        {/* Real-time Progress Bar when downloading folder */}
+        {/* Real-time Static Progress Bar inside this Folder Header */}
         {isDownloadingThisFolder && offlineSyncProgress && (
           <div className="mt-3.5 pt-3 border-t border-slate-800/80 animate-in fade-in duration-200">
-            <div className="flex items-center justify-between text-xs mb-1.5">
-              <span className="text-amber-300 font-semibold flex items-center gap-1.5 truncate max-w-[70%]">
+            <div className="flex items-center justify-between text-xs mb-1.5 gap-2">
+              <span className="text-amber-300 font-semibold flex items-center gap-1.5 truncate min-w-0">
                 <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0 text-amber-400" />
-                <span className="truncate">Descargando de manera local: {offlineSyncProgress.trackTitle}</span>
+                <span className="truncate">Descargando completa: {offlineSyncProgress.trackTitle}</span>
               </span>
-              <span className="text-slate-300 font-mono font-bold shrink-0 ml-2">
-                {offlineSyncProgress.current} / {offlineSyncProgress.total} (
-                {Math.round(
-                  (offlineSyncProgress.current / Math.max(1, offlineSyncProgress.total)) * 100
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-slate-300 font-mono font-bold text-[11px] sm:text-xs">
+                  {offlineSyncProgress.current}/{offlineSyncProgress.total} (
+                  {Math.round(
+                    (offlineSyncProgress.current / Math.max(1, offlineSyncProgress.total)) * 100
+                  )}
+                  %)
+                </span>
+                {onCancelOfflineSync && (
+                  <button
+                    type="button"
+                    onClick={onCancelOfflineSync}
+                    className="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-rose-400 text-[10px] font-bold border border-slate-700 transition-colors"
+                    title="Detener descarga de esta carpeta"
+                  >
+                    Detener
+                  </button>
                 )}
-                %)
-              </span>
+              </div>
             </div>
-            <div className="w-full h-1.5 bg-slate-800/90 rounded-full overflow-hidden">
+            <div className="w-full h-2 bg-slate-800/90 rounded-full overflow-hidden border border-slate-700/50">
               <div
-                className="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-amber-400 transition-all duration-300"
+                className="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-amber-400 transition-all duration-300 rounded-full"
                 style={{
                   width: `${(offlineSyncProgress.current / Math.max(1, offlineSyncProgress.total)) * 100}%`,
                 }}

@@ -25,6 +25,7 @@ import {
   downloadTracksAsJSON,
   cacheTracksForOffline,
 } from '../utils/downloadHelper';
+import { downloadAndSavePlaylistOffline } from '../utils/offlineAudioStorage';
 import { isFavoritesPlaylist } from '../App';
 
 interface FolderDownloadModalProps {
@@ -96,14 +97,14 @@ export const FolderDownloadModal: React.FC<FolderDownloadModalProps> = ({
     setIsProcessing(true);
     setFinishedMessage(null);
 
-    const result = await cacheTracksForOffline(targetTracks, (current, total, statusText) => {
+    const savedIds = await downloadAndSavePlaylistOffline(targetTracks, (current, total, statusText) => {
       setProgress({ current, total, statusText });
     });
 
     setIsProcessing(false);
     onRefreshOffline?.();
     setFinishedMessage(
-      `¡Modo Offline activado para "${cleanFolderName}" (${targetTracks.length} canciones)! Ya puedes escucharlas en tu celular sin internet.`
+      `¡Modo Offline activado para "${cleanFolderName}" (${savedIds.length} canciones descargadas)! Ya puedes escucharlas en tu celular sin internet.`
     );
   };
 
