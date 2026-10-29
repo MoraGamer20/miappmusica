@@ -60,7 +60,7 @@ export const FullTrackDownloadModal: React.FC<FullTrackDownloadModalProps> = ({
     setIsDownloading(true);
     setStatusMessage('Descargando archivo MP3 a tu dispositivo...');
     try {
-      const ok = await downloadTrackAudio(track, (msg) => setStatusMessage(msg));
+      const ok = await downloadTrackAudio(track);
       if (ok) {
         setDownloadSuccess(true);
         setStatusMessage('¡Archivo MP3 descargado con éxito!');

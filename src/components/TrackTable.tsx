@@ -24,9 +24,16 @@ import {
   Edit,
   Sparkles,
   HardDrive,
+  FolderDown,
+  Shuffle,
+  Upload,
+  CheckCircle2,
+  Loader2,
+  ArrowDownCircle,
 } from 'lucide-react';
 import { Track, SortField, SortOrder } from '../types/music';
 import { getStreamingLinks } from '../utils/downloadHelper';
+import { isFavoritesPlaylist } from '../App';
 
 interface TrackTableProps {
   tracks: Track[];
@@ -51,7 +58,16 @@ interface TrackTableProps {
   activePlaylist?: string;
   isFolderOffline?: boolean;
   onToggleFolderOffline?: (folderName: string) => void;
+  offlineSyncProgress?: {
+    current: number;
+    total: number;
+    trackTitle: string;
+    playlistName: string;
+    currentTrackId?: string;
+  } | null;
   onDirectDownloadTrack?: (track: Track) => void;
+  onOpenFolderDownloadModal?: (folderName?: string) => void;
+  onImportLocalAudio?: () => void;
 }
 
 export const TrackTable: React.FC<TrackTableProps> = ({
@@ -74,10 +90,13 @@ export const TrackTable: React.FC<TrackTableProps> = ({
   onOpenDownloadModal,
   onOpenSearchModal,
   offlineTrackIds,
-  activePlaylist,
-  isFolderOffline,
+  activePlaylist = 'ALL',
+  isFolderOffline = false,
   onToggleFolderOffline,
+  offlineSyncProgress,
   onDirectDownloadTrack,
+  onOpenFolderDownloadModal,
+  onImportLocalAudio,
 }) => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
@@ -171,77 +190,219 @@ export const TrackTable: React.FC<TrackTableProps> = ({
     return gradients[Math.abs(hash) % gradients.length];
   };
 
+  const isFav = isFavoritesPlaylist(activePlaylist);
+  const canonicalFolderKey = isFav ? 'Favorite Tracks' : activePlaylist;
+  const isDownloadingThisFolder = Boolean(
+    offlineSyncProgress &&
+      (offlineSyncProgress.playlistName === canonicalFolderKey ||
+        (isFav && isFavoritesPlaylist(offlineSyncProgress.playlistName)))
+  );
+
   return (
     <div className="flex-1 flex flex-col min-w-0 w-full max-w-full bg-slate-950 pb-44 overflow-x-hidden">
       {/* =========================================================================
-          OFFLINE FOLDER DOWNLOAD SWITCH: Download whole folder for offline listening
+          FOLDER / PLAYLIST HEADER HERO BANNER (Unified, clean, responsive)
           ========================================================================= */}
-      {onToggleFolderOffline && (
-        <div className="flex items-center justify-between px-3.5 sm:px-6 py-2.5 bg-gradient-to-r from-slate-900 via-slate-900/90 to-emerald-950/40 border-b border-slate-800/80">
-          <div className="flex items-center gap-2.5 min-w-0">
+      <div
+        className={`px-3.5 sm:px-6 py-4 border-b transition-all ${
+          isFav
+            ? 'bg-gradient-to-r from-rose-950/80 via-slate-900 to-slate-950 border-rose-500/30'
+            : activePlaylist === 'OFFLINE'
+            ? 'bg-gradient-to-r from-emerald-950/80 via-slate-900 to-slate-950 border-emerald-500/30'
+            : 'bg-gradient-to-r from-purple-950/70 via-slate-900 to-slate-950 border-purple-500/30'
+        }`}
+      >
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3.5">
+          <div className="flex items-center gap-3.5 min-w-0">
             <div
-              className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
-                isFolderOffline
-                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
-                  : 'bg-slate-800 text-slate-400'
+              className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-lg ${
+                isFav
+                  ? 'bg-rose-600/25 text-rose-400 border border-rose-500/40 shadow-rose-900/30'
+                  : activePlaylist === 'OFFLINE'
+                  ? 'bg-emerald-600/25 text-emerald-400 border border-emerald-500/40 shadow-emerald-900/30'
+                  : 'bg-purple-600/25 text-purple-400 border border-purple-500/40 shadow-purple-900/30'
               }`}
             >
-              <HardDrive className="w-4 h-4" />
+              {isFav ? (
+                <Heart className="w-6 h-6 fill-rose-500 text-rose-500" />
+              ) : activePlaylist === 'OFFLINE' ? (
+                <HardDrive className="w-6 h-6 text-emerald-400" />
+              ) : (
+                <FolderDown className="w-6 h-6 text-purple-400" />
+              )}
             </div>
+
             <div className="min-w-0">
-              <span className="text-xs font-bold text-white flex items-center gap-1.5 truncate">
-                Descargar para escuchar sin conexión
-                {isFolderOffline && (
-                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-500/30">
-                    ✓ Activado
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-base sm:text-lg font-bold text-white tracking-tight truncate">
+                  {isFav
+                    ? 'Favoritas ❤️ (Canciones con Corazón)'
+                    : activePlaylist === 'ALL'
+                    ? 'Toda tu Biblioteca de Canciones'
+                    : activePlaylist === 'OFFLINE'
+                    ? 'Descargadas / Escuchar Offline'
+                    : `Carpeta: ${activePlaylist}`}
+                </h2>
+                {isFav && (
+                  <span className="text-[10px] bg-rose-500/20 text-rose-300 border border-rose-500/40 px-2 py-0.5 rounded-full font-bold">
+                    ❤️ CARPETA FAVORITAS
                   </span>
                 )}
-              </span>
-              <p className="text-[10px] text-slate-400 truncate">
-                {isFolderOffline
-                  ? 'Canciones descargadas en este dispositivo • Se reproducen sin internet'
-                  : 'Activa el switch para descargar todas las canciones y reproducir sin internet'}
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5 truncate">
+                <strong className="text-slate-200">{tracks.length.toLocaleString()}</strong>{' '}
+                {isFav ? 'canciones con corazón' : 'canciones'}
+                {' • '}
+                <span className="text-slate-400">Escucha offline y en segundo plano</span>
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            {/* Quick Batch Download Block Button */}
-            <button
-              type="button"
-              onClick={() => onBatchDownloadZip(tracks)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-purple-600/25 text-purple-300 border border-purple-500/40 hover:bg-purple-600/40 active:scale-95 transition-all shadow-sm"
-              title="Descargar este bloque de canciones completo en archivo ZIP"
-            >
-              <FileArchive className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Descargar Bloque ({tracks.length})</span>
-              <span className="sm:hidden">Bloque</span>
-            </button>
-
-            {/* Toggle Switch */}
-            <button
-              type="button"
-              role="switch"
-              aria-checked={isFolderOffline}
-              onClick={() => onToggleFolderOffline(activePlaylist || 'ALL')}
-              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                isFolderOffline ? 'bg-emerald-600' : 'bg-slate-700'
-              }`}
-              title={
-                isFolderOffline
-                  ? 'Desactivar descarga sin conexión'
-                  : 'Descargar toda esta carpeta para escuchar sin conexión'
-              }
-            >
-              <span
-                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                  isFolderOffline ? 'translate-x-5' : 'translate-x-0'
+          {/* Folder Action Controls: Play Button + OFFLINE DOWNLOAD SWITCH + Actions */}
+          <div className="flex items-center gap-2.5 flex-wrap sm:flex-nowrap shrink-0">
+            {tracks.length > 0 && (
+              <button
+                type="button"
+                onClick={() => onPlayTrack(tracks[0], tracks)}
+                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-white font-semibold text-xs active:scale-95 transition-all shadow-md ${
+                  isFav
+                    ? 'bg-gradient-to-r from-rose-600 to-pink-600 shadow-rose-600/30 hover:brightness-110'
+                    : 'bg-gradient-to-r from-purple-600 to-indigo-600 shadow-purple-600/30 hover:brightness-110'
                 }`}
-              />
-            </button>
+                title="Reproducir todas las canciones de esta carpeta desde el inicio"
+              >
+                <Play className="w-3.5 h-3.5 fill-current" />
+                <span>Reproducir Carpeta</span>
+              </button>
+            )}
+
+            {/* THE OFFLINE DOWNLOAD TOGGLE SWITCH */}
+            {onToggleFolderOffline && (
+              <div
+                onClick={() => onToggleFolderOffline(canonicalFolderKey)}
+                className={`flex items-center gap-2.5 px-3 py-1.5 rounded-2xl border transition-all cursor-pointer select-none active:scale-95 ${
+                  isFolderOffline
+                    ? 'bg-emerald-950/60 border-emerald-500/50 shadow-sm shadow-emerald-950/50'
+                    : isDownloadingThisFolder
+                    ? 'bg-amber-950/60 border-amber-500/50'
+                    : 'bg-slate-900/90 border-slate-700/80 hover:border-slate-600'
+                }`}
+                title={
+                  isFolderOffline
+                    ? 'Descarga offline activa. Haz clic para desactivar y liberar espacio en almacenamiento.'
+                    : 'Activar para descargar de manera local toda la carpeta para escuchar sin conexión.'
+                }
+              >
+                <div className="flex flex-col text-left">
+                  <span className="text-xs font-bold flex items-center gap-1.5">
+                    {isDownloadingThisFolder ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 text-amber-400 animate-spin" />
+                        <span className="text-amber-300">Descargando...</span>
+                      </>
+                    ) : isFolderOffline ? (
+                      <>
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                        <span className="text-emerald-300">Descargada</span>
+                      </>
+                    ) : (
+                      <>
+                        <ArrowDownCircle className="w-3.5 h-3.5 text-slate-300" />
+                        <span className="text-slate-200">Descargar</span>
+                      </>
+                    )}
+                  </span>
+                  <span className="text-[10px] text-slate-400">
+                    {isDownloadingThisFolder
+                      ? `${offlineSyncProgress?.current || 0}/${offlineSyncProgress?.total || tracks.length}`
+                      : isFolderOffline
+                      ? 'Sin conexión lista'
+                      : 'Memoria local'}
+                  </span>
+                </div>
+
+                {/* Switch toggle control */}
+                <div
+                  role="switch"
+                  aria-checked={isFolderOffline}
+                  className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                    isFolderOffline
+                      ? 'bg-emerald-500'
+                      : isDownloadingThisFolder
+                      ? 'bg-amber-500'
+                      : 'bg-slate-700'
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                      isFolderOffline ? 'translate-x-5' : 'translate-x-0'
+                    } flex items-center justify-center`}
+                  >
+                    {isDownloadingThisFolder ? (
+                      <Loader2 className="w-3 h-3 text-amber-600 animate-spin" />
+                    ) : isFolderOffline ? (
+                      <Check className="w-3 h-3 text-emerald-600 stroke-[3]" />
+                    ) : (
+                      <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                    )}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {tracks.length > 0 && onOpenFolderDownloadModal && (
+              <button
+                type="button"
+                onClick={() => onOpenFolderDownloadModal(canonicalFolderKey)}
+                className="hidden lg:flex items-center gap-1.5 px-3 py-2 rounded-xl font-medium text-xs text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-800 border border-slate-700 transition-colors"
+                title="Descargar paquete ZIP para dispositivos externos"
+              >
+                <Download className="w-3.5 h-3.5 text-slate-400" />
+                <span>Exportar ZIP</span>
+              </button>
+            )}
+
+            {onImportLocalAudio && (
+              <button
+                type="button"
+                onClick={onImportLocalAudio}
+                className="hidden xl:flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-300 hover:text-white font-medium text-xs transition-colors border border-slate-700"
+                title="Cargar archivos MP3 locales a la app"
+              >
+                <Upload className="w-3.5 h-3.5 text-blue-400" />
+                <span>Cargar MP3s</span>
+              </button>
+            )}
           </div>
         </div>
-      )}
+
+        {/* Real-time Progress Bar when downloading folder */}
+        {isDownloadingThisFolder && offlineSyncProgress && (
+          <div className="mt-3.5 pt-3 border-t border-slate-800/80 animate-in fade-in duration-200">
+            <div className="flex items-center justify-between text-xs mb-1.5">
+              <span className="text-amber-300 font-semibold flex items-center gap-1.5 truncate max-w-[70%]">
+                <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0 text-amber-400" />
+                <span className="truncate">Descargando de manera local: {offlineSyncProgress.trackTitle}</span>
+              </span>
+              <span className="text-slate-300 font-mono font-bold shrink-0 ml-2">
+                {offlineSyncProgress.current} / {offlineSyncProgress.total} (
+                {Math.round(
+                  (offlineSyncProgress.current / Math.max(1, offlineSyncProgress.total)) * 100
+                )}
+                %)
+              </span>
+            </div>
+            <div className="w-full h-1.5 bg-slate-800/90 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-amber-400 transition-all duration-300"
+                style={{
+                  width: `${(offlineSyncProgress.current / Math.max(1, offlineSyncProgress.total)) * 100}%`,
+                }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* =========================================================================
           CONTROLS TOOLBAR: Opaque background, no conflicting sticky offsets or blurs
@@ -366,7 +527,7 @@ export const TrackTable: React.FC<TrackTableProps> = ({
             className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-600/40 transition-colors font-medium shrink-0"
           >
             <FileArchive className="w-3.5 h-3.5" />
-            <span>Descargar ZIP (Completas)</span>
+            <span>Descargar ZIP</span>
           </button>
 
           {/* Mark Favorites */}
@@ -475,6 +636,12 @@ export const TrackTable: React.FC<TrackTableProps> = ({
         {paginatedTracks.map((track) => {
           const isCurrent = currentTrack?.id === track.id;
           const isSelected = selectedIds.has(track.id);
+          const isDownloaded = Boolean(offlineTrackIds?.has(track.id) || track.isOfflineAvailable);
+          const isDownloading = Boolean(
+            offlineSyncProgress?.currentTrackId === track.id ||
+              (offlineSyncProgress &&
+                offlineSyncProgress.trackTitle.toLowerCase().includes(track.title.toLowerCase()))
+          );
 
           return (
             <div
@@ -567,11 +734,20 @@ export const TrackTable: React.FC<TrackTableProps> = ({
                   >
                     {track.title}
                   </p>
-                  {(offlineTrackIds?.has(track.id) || track.isOfflineAvailable) && (
-                    <span title="Audio descargado / En disco" className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-1 py-0.2 rounded shrink-0">
-                      Offline
+                  {isDownloading ? (
+                    <span className="inline-flex items-center gap-1 text-[9px] font-bold text-amber-300 bg-amber-500/20 border border-amber-500/40 px-1.5 py-0.5 rounded-full shrink-0 animate-pulse">
+                      <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                      Descargando...
                     </span>
-                  )}
+                  ) : isDownloaded ? (
+                    <span
+                      title="Canción descargada en almacenamiento local para escuchar sin internet"
+                      className="inline-flex items-center gap-1 text-[9px] font-bold text-emerald-300 bg-emerald-500/20 border border-emerald-500/40 px-1.5 py-0.5 rounded-full shrink-0 shadow-sm"
+                    >
+                      <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400" />
+                      Descargada
+                    </span>
+                  ) : null}
                 </div>
                 <div className="flex items-center gap-1.5 text-xs text-slate-400 truncate mt-0.5">
                   <span className="truncate">{track.artist}</span>
@@ -604,17 +780,37 @@ export const TrackTable: React.FC<TrackTableProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    if (onDirectDownloadTrack) {
+                    if (isDownloaded) {
+                      onOpenDownloadModal(track);
+                    } else if (onDirectDownloadTrack) {
                       onDirectDownloadTrack(track);
                     } else {
                       onOpenDownloadModal(track);
                     }
                   }}
                   aria-label={`Descargar ${track.title}`}
-                  className="w-9 h-9 rounded-full flex items-center justify-center text-slate-400 hover:text-emerald-400 active:scale-90 transition-transform"
-                  title="Descargar archivo MP3 directo"
+                  title={
+                    isDownloaded
+                      ? 'Descargada en almacenamiento local (clic para ver opciones)'
+                      : isDownloading
+                      ? 'Descargando audio a memoria...'
+                      : `Descargar ${track.title} a almacenamiento local`
+                  }
+                  className={`w-9 h-9 rounded-full flex items-center justify-center active:scale-90 transition-all ${
+                    isDownloaded
+                      ? 'text-emerald-400 bg-emerald-500/15 border border-emerald-500/30'
+                      : isDownloading
+                      ? 'text-amber-400 bg-amber-500/15 border border-amber-500/30'
+                      : 'text-slate-400 hover:text-emerald-400 hover:bg-slate-800'
+                  }`}
                 >
-                  <Download className={`w-4 h-4 ${offlineTrackIds?.has(track.id) ? 'text-emerald-400' : ''}`} />
+                  {isDownloading ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
+                  ) : isDownloaded ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  ) : (
+                    <Download className="w-4 h-4" />
+                  )}
                 </button>
 
                 {/* 3-Dots Action Sheet Button */}
@@ -715,6 +911,12 @@ export const TrackTable: React.FC<TrackTableProps> = ({
             {paginatedTracks.map((track) => {
               const isSelected = selectedIds.has(track.id);
               const isCurrent = currentTrack?.id === track.id;
+              const isDownloaded = Boolean(offlineTrackIds?.has(track.id) || track.isOfflineAvailable);
+              const isDownloading = Boolean(
+                offlineSyncProgress?.currentTrackId === track.id ||
+                  (offlineSyncProgress &&
+                    offlineSyncProgress.trackTitle.toLowerCase().includes(track.title.toLowerCase()))
+              );
 
               return (
                 <tr
@@ -795,11 +997,20 @@ export const TrackTable: React.FC<TrackTableProps> = ({
                           >
                             {track.title}
                           </p>
-                          {(offlineTrackIds?.has(track.id) || track.isOfflineAvailable) && (
-                            <span title="Audio descargado / En disco" className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-1 py-0.2 rounded shrink-0">
-                              Offline
+                          {isDownloading ? (
+                            <span className="inline-flex items-center gap-1 text-[9px] font-bold text-amber-300 bg-amber-500/20 border border-amber-500/40 px-1.5 py-0.5 rounded-full shrink-0 animate-pulse">
+                              <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                              Descargando
                             </span>
-                          )}
+                          ) : isDownloaded ? (
+                            <span
+                              title="Canción descargada en almacenamiento local para escuchar sin internet"
+                              className="inline-flex items-center gap-1 text-[9px] font-bold text-emerald-300 bg-emerald-500/20 border border-emerald-500/40 px-2 py-0.5 rounded-full shrink-0 shadow-sm"
+                            >
+                              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                              Descargada
+                            </span>
+                          ) : null}
                         </div>
                         <p className="text-[11px] text-slate-400 truncate md:hidden">
                           {track.artist}
@@ -844,17 +1055,37 @@ export const TrackTable: React.FC<TrackTableProps> = ({
                       <button
                         type="button"
                         onClick={() => {
-                          if (onDirectDownloadTrack) {
+                          if (isDownloaded) {
+                            onOpenDownloadModal(track);
+                          } else if (onDirectDownloadTrack) {
                             onDirectDownloadTrack(track);
                           } else {
                             onOpenDownloadModal(track);
                           }
                         }}
                         aria-label={`Descargar ${track.title}`}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-400 transition-colors"
-                        title="Descargar archivo MP3 directo"
+                        className={`p-1.5 rounded-lg transition-colors ${
+                          isDownloaded
+                            ? 'text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20'
+                            : isDownloading
+                            ? 'text-amber-400 bg-amber-500/10'
+                            : 'text-slate-400 hover:text-emerald-400 hover:bg-slate-800'
+                        }`}
+                        title={
+                          isDownloaded
+                            ? 'Descargada en almacenamiento local (clic para ver opciones)'
+                            : isDownloading
+                            ? 'Descargando audio a memoria...'
+                            : `Descargar "${track.title}" a almacenamiento local`
+                        }
                       >
-                        <Download className={`w-4 h-4 ${offlineTrackIds?.has(track.id) ? 'text-emerald-400' : ''}`} />
+                        {isDownloading ? (
+                          <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
+                        ) : isDownloaded ? (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        ) : (
+                          <Download className="w-4 h-4" />
+                        )}
                       </button>
 
                       <button

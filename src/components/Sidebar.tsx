@@ -65,7 +65,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenSleepTimer,
   onOpenLyrics,
   hasCurrentTrack,
-  offlinePlaylists = {},
+  offlinePlaylists,
   onToggleFolderOffline,
 }) => {
   const [newPlaylistName, setNewPlaylistName] = useState('');
@@ -220,51 +220,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   >
                     <div className="flex items-center gap-2.5 truncate">
                       {isFav ? (
-                        <Heart className="w-4 h-4 text-rose-400 shrink-0 fill-rose-500" />
+                        <Heart className="w-4 h-4 text-rose-400 shrink-0 fill-rose-400/20" />
                       ) : (
                         <Disc className="w-4 h-4 text-slate-400 group-hover:text-purple-400 shrink-0" />
                       )}
-                      <span className="truncate">{isFav ? 'Favoritas (Corazón)' : pl.name}</span>
+                      <span className="truncate">{pl.name}</span>
                     </div>
                     <span
                       className={`text-[11px] px-2 py-0.5 rounded-full ml-1 shrink-0 ${
                         isActive
-                          ? isFav ? 'bg-rose-700/60 text-white' : 'bg-purple-700/60 text-purple-100'
-                          : isFav ? 'bg-rose-950/60 text-rose-300 border border-rose-500/20' : 'bg-slate-800 text-slate-400'
+                          ? 'bg-purple-700/60 text-purple-100'
+                          : 'bg-slate-800 text-slate-400'
                       }`}
                     >
                       {pl.count}
                     </span>
                   </button>
 
-                  {/* Offline Download Switch Toggle */}
-                  {onToggleFolderOffline && (
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={Boolean(offlinePlaylists[pl.name])}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onToggleFolderOffline(pl.name);
-                      }}
-                      className={`relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border border-transparent transition-colors duration-200 ease-in-out ml-1 ${
-                        offlinePlaylists[pl.name] ? 'bg-emerald-600' : 'bg-slate-700 opacity-60 group-hover:opacity-100'
-                      }`}
-                      title={
-                        offlinePlaylists[pl.name]
-                          ? 'Descargado offline (Haz clic para desactivar)'
-                          : 'Descargar toda la playlist para escuchar sin conexión'
-                      }
-                    >
-                      <span
-                        className={`pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                          offlinePlaylists[pl.name] ? 'translate-x-3' : 'translate-x-0'
-                        }`}
-                      />
-                    </button>
-                  )}
-
-                  {/* Quick Folder Download Button on Hover */}
+                  {/* Quick download folder button */}
                   {onOpenFolderDownloadModal && (
                     <button
                       type="button"
@@ -272,9 +245,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         e.stopPropagation();
                         onOpenFolderDownloadModal(pl.name);
                       }}
-                      className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-purple-300 rounded-lg hover:bg-slate-800 transition-all ml-0.5 shrink-0"
-                      title={`Descargar bloque de canciones de "${pl.name}"`}
-                      aria-label={`Descargar bloque de ${pl.name}`}
+                      className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-emerald-400 hover:bg-slate-800 rounded-lg transition-all ml-0.5"
+                      title={`Descargar carpeta "${pl.name}"`}
+                      aria-label={`Descargar carpeta ${pl.name}`}
                     >
                       <FolderDown className="w-3.5 h-3.5" />
                     </button>
@@ -284,7 +257,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <button
                       type="button"
                       onClick={() => onDeleteCustomPlaylist(pl.name)}
-                      className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-400 transition-opacity ml-1"
+                      className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-400 transition-opacity ml-0.5"
                       title="Eliminar playlist personalizada"
                       aria-label={`Eliminar playlist ${pl.name}`}
                     >

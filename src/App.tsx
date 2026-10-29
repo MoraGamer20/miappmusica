@@ -42,6 +42,7 @@ import {
   importLocalAudioFiles,
   downloadAndSavePlaylistOffline,
   removePlaylistOffline,
+  saveOfflineAudio,
 } from './utils/offlineAudioStorage';
 import { downloadTrackAudio } from './utils/downloadHelper';
 import defaultCsvRaw from '../public/assets/aistudio/My_Deezer_Library_e6092c00.csv?raw';
@@ -141,7 +142,9 @@ export default function App() {
     total: number;
     trackTitle: string;
     playlistName: string;
+    currentTrackId?: string;
   } | null>(null);
+  const cancelOfflineSyncRef = useRef(false);
   const localAudioInputRef = useRef<HTMLInputElement | null>(null);
   const [searchModalInitialQuery, setSearchModalInitialQuery] = useState('');
   const [isStatsModalOpen, setIsStatsModalOpen] = useState(false);
@@ -268,55 +271,92 @@ export default function App() {
     }
   };
 
-  // Toggle offline download for an entire playlist/folder
+  // Toggle offline download for an entire playlist/folder (silent, instant, no questions)
   const handleTogglePlaylistOffline = async (playlistName: string) => {
-    const isCurrentlyOffline = Boolean(offlinePlaylists[playlistName]);
     const isFav = isFavoritesPlaylist(playlistName);
+    const canonicalKey = isFav ? 'Favorite Tracks' : playlistName;
+    const isCurrentlyOffline = Boolean(
+      offlinePlaylists[canonicalKey] ||
+      (isFav && (offlinePlaylists['Favoritas'] || offlinePlaylists['Favorite Tracks']))
+    );
+
     const targetTracks =
       playlistName === 'ALL'
         ? tracks
         : isFav
-        ? tracks.filter((t) => Boolean(t.isFavorite || t.playlist?.toLowerCase().includes('favorit')))
+        ? tracks.filter((t) => Boolean(t.isFavorite || isFavoritesPlaylist(t.playlist) || t.type?.toLowerCase().includes('fav')))
         : tracks.filter((t) => (t.playlist || 'General').toLowerCase() === playlistName.toLowerCase());
 
+    if (targetTracks.length === 0) {
+      showToast('No hay canciones en esta carpeta para descargar');
+      return;
+    }
+
     if (isCurrentlyOffline) {
-      // Turn OFF
+      // Turn OFF immediately without prompts and cancel active downloads if running
+      cancelOfflineSyncRef.current = true;
+      setOfflineSyncProgress(null);
       await removePlaylistOffline(targetTracks);
-      const updated = { ...offlinePlaylists, [playlistName]: false };
+      const updated = {
+        ...offlinePlaylists,
+        [canonicalKey]: false,
+        ...(isFav ? { 'Favoritas': false, 'Favorite Tracks': false } : {}),
+      };
       setOfflinePlaylists(updated);
       try {
         localStorage.setItem(OFFLINE_PLAYLISTS_KEY, JSON.stringify(updated));
       } catch {}
       const newIds = await getAllOfflineTrackIds();
       setOfflineTrackIds(newIds);
-      showToast(`Descarga sin conexión desactivada para "${playlistName}"`);
+      showToast(`Descarga sin conexión desactivada para "${isFav ? 'Favoritas ❤️' : playlistName}"`);
     } else {
-      // Turn ON
+      // Turn ON immediately - runs in the background without blocking or freezing the screen!
+      cancelOfflineSyncRef.current = false;
       setOfflineSyncProgress({
         current: 0,
         total: targetTracks.length,
-        trackTitle: 'Iniciando descarga...',
-        playlistName,
+        trackTitle: 'Iniciando descarga local...',
+        playlistName: canonicalKey,
+        currentTrackId: undefined,
       });
 
-      try {
-        const savedIds = await downloadAndSavePlaylistOffline(targetTracks, (curr, tot, title) => {
-          setOfflineSyncProgress({
-            current: curr,
-            total: tot,
-            trackTitle: title,
-            playlistName,
-          });
-        });
+      showToast(`Descargando "${isFav ? 'Favoritas ❤️' : playlistName}" en segundo plano...`);
 
-        const updated = { ...offlinePlaylists, [playlistName]: true };
-        setOfflinePlaylists(updated);
-        try {
-          localStorage.setItem(OFFLINE_PLAYLISTS_KEY, JSON.stringify(updated));
-        } catch {}
-        const newIds = await getAllOfflineTrackIds();
-        setOfflineTrackIds(newIds);
-        showToast(`¡"${playlistName}" descargada para escuchar sin conexión! (${savedIds.length} canciones) 🎧`);
+      try {
+        const savedIds = await downloadAndSavePlaylistOffline(
+          targetTracks,
+          (curr, tot, title, currTrackId) => {
+            if (!cancelOfflineSyncRef.current) {
+              setOfflineSyncProgress({
+                current: curr,
+                total: tot,
+                trackTitle: title,
+                playlistName: canonicalKey,
+                currentTrackId: currTrackId,
+              });
+            }
+          },
+          (savedTrackId) => {
+            // Real-time incremental update so the user watches the checkmarks appear one by one!
+            setOfflineTrackIds((prev) => new Set(prev).add(savedTrackId));
+          },
+          () => cancelOfflineSyncRef.current
+        );
+
+        if (!cancelOfflineSyncRef.current) {
+          const updated = {
+            ...offlinePlaylists,
+            [canonicalKey]: true,
+            ...(isFav ? { 'Favoritas': true, 'Favorite Tracks': true } : {}),
+          };
+          setOfflinePlaylists(updated);
+          try {
+            localStorage.setItem(OFFLINE_PLAYLISTS_KEY, JSON.stringify(updated));
+          } catch {}
+          const newIds = await getAllOfflineTrackIds();
+          setOfflineTrackIds(newIds);
+          showToast(`¡"${isFav ? 'Favoritas ❤️' : playlistName}" descargada para escuchar sin conexión! (${savedIds.length} canciones) 🎧`);
+        }
       } catch (e) {
         console.error('Error downloading playlist offline', e);
         showToast('Error al descargar playlist para offline');
@@ -326,9 +366,27 @@ export default function App() {
     }
   };
 
-  // Direct MP3 download handler without redirects
+  // Direct MP3 download handler without redirects - caches in IndexedDB
   const handleDirectDownloadTrack = async (track: Track) => {
-    showToast(`Descargando "${track.title}" en MP3...`);
+    showToast(`Guardando "${track.title}" de manera local...`);
+    try {
+      let previewUrl = track.previewUrl;
+      if (!previewUrl) {
+        const details = await getTrackDetails(track);
+        previewUrl = details.previewUrl;
+      }
+      if (previewUrl) {
+        const res = await fetch(previewUrl);
+        if (res.ok) {
+          const blob = await res.blob();
+          await saveOfflineAudio(track, blob);
+          setOfflineTrackIds((prev) => new Set(prev).add(track.id));
+          showToast(`¡"${track.title}" guardada para escuchar sin conexión! 🎧`);
+          return;
+        }
+      }
+    } catch {}
+
     const ok = await downloadTrackAudio(track);
     if (ok) {
       showToast(`¡"${track.title}" descargada con éxito!`);
@@ -1294,31 +1352,6 @@ export default function App() {
                   </button>
                 </div>
 
-                {/* Mobile Active Folder Quick Bar */}
-                <div className="mt-2.5 px-3 py-2 rounded-xl bg-slate-800/80 border border-slate-700/60 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <span className="text-xs font-bold text-white truncate">
-                      {isFavoritesPlaylist(activePlaylist)
-                        ? '❤️ Favoritas'
-                        : activePlaylist === 'ALL'
-                        ? '🎵 Toda la música'
-                        : activePlaylist === 'OFFLINE'
-                        ? '💾 Offline'
-                        : `📁 ${activePlaylist}`}
-                    </span>
-                    <span className="text-[10px] text-slate-400 font-mono">({filteredTracks.length})</span>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => handleOpenFolderDownload(activePlaylist === 'ALL' ? 'ALL' : activePlaylist)}
-                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] shadow shrink-0 active:scale-95 transition-all"
-                  >
-                    <FolderDown className="w-3.5 h-3.5" />
-                    <span>Descargar Carpeta</span>
-                  </button>
-                </div>
-
                 {/* Active Filter Banner if artist or playlist selected */}
                 {(selectedArtist || (activePlaylist !== 'ALL' && !isFavoritesPlaylist(activePlaylist))) && (
                   <div className="mt-2 px-3 py-1.5 rounded-xl bg-purple-950/40 border border-purple-500/30 flex items-center justify-between text-xs">
@@ -1368,9 +1401,15 @@ export default function App() {
                 }}
                 offlineTrackIds={offlineTrackIds}
                 activePlaylist={activePlaylist}
-                isFolderOffline={Boolean(offlinePlaylists[activePlaylist])}
+                isFolderOffline={Boolean(
+                  offlinePlaylists[activePlaylist === 'ALL' ? 'ALL' : isFavoritesPlaylist(activePlaylist) ? 'Favorite Tracks' : activePlaylist] ||
+                    (isFavoritesPlaylist(activePlaylist) && (offlinePlaylists['Favoritas'] || offlinePlaylists['Favorite Tracks']))
+                )}
                 onToggleFolderOffline={handleTogglePlaylistOffline}
+                offlineSyncProgress={offlineSyncProgress}
                 onDirectDownloadTrack={handleDirectDownloadTrack}
+                onOpenFolderDownloadModal={(folder) => handleOpenFolderDownload(folder || activePlaylist)}
+                onImportLocalAudio={() => localAudioInputRef.current?.click()}
               />
             </div>
           )}
@@ -1413,49 +1452,7 @@ export default function App() {
 
           {mobileTab === 'favorites' && (
             <div className="flex flex-col w-full">
-              {/* Active Favorites Header */}
-              <div className="px-4 pt-3.5 pb-3 bg-gradient-to-b from-rose-950/60 via-slate-900 to-slate-950 border-b border-rose-500/30">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-10 h-10 rounded-2xl bg-rose-600/20 text-rose-400 flex items-center justify-center border border-rose-500/30 shrink-0 shadow-lg shadow-rose-900/20">
-                      <Heart className="w-5 h-5 fill-rose-500 text-rose-500" />
-                    </div>
-                    <div className="min-w-0">
-                      <h2 className="text-base font-bold text-white truncate">
-                        Tus Canciones Favoritas
-                      </h2>
-                      <p className="text-xs text-rose-300 truncate">
-                        {favoriteTracks.length} canciones con corazón ❤️
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 shrink-0">
-                    {favoriteTracks.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => playTrackDirect(favoriteTracks[0], favoriteTracks)}
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 text-white font-semibold text-xs active:scale-95 transition-transform shadow-md shadow-rose-600/30"
-                      >
-                        <Play className="w-3.5 h-3.5 fill-current" />
-                        <span>Reproducir</span>
-                      </button>
-                    )}
-
-                    <button
-                      type="button"
-                      onClick={() => handleOpenFolderDownload('Favorite Tracks')}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold text-xs active:scale-95 transition-all shadow-md shadow-emerald-600/25"
-                      title="Descargar todas las canciones con corazón en MP3 completas para escuchar offline"
-                    >
-                      <FolderDown className="w-3.5 h-3.5" />
-                      <span>Descargar Carpeta</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Favorites Track Table */}
+              {/* Favorites Track Table with Unified Hero & Download Switch */}
               <TrackTable
                 tracks={favoriteTracks}
                 currentTrack={currentTrack}
@@ -1480,9 +1477,12 @@ export default function App() {
                 }}
                 offlineTrackIds={offlineTrackIds}
                 activePlaylist="Favorite Tracks"
-                isFolderOffline={Boolean(offlinePlaylists['Favorite Tracks'])}
+                isFolderOffline={Boolean(offlinePlaylists['Favorite Tracks'] || offlinePlaylists['Favoritas'])}
                 onToggleFolderOffline={handleTogglePlaylistOffline}
+                offlineSyncProgress={offlineSyncProgress}
                 onDirectDownloadTrack={handleDirectDownloadTrack}
+                onOpenFolderDownloadModal={(folder) => handleOpenFolderDownload(folder || 'Favorite Tracks')}
+                onImportLocalAudio={() => localAudioInputRef.current?.click()}
               />
             </div>
           )}
@@ -1513,93 +1513,6 @@ export default function App() {
 
         {/* DESKTOP TRACK TABLE (hidden on mobile, visible on md and up) */}
         <div className="hidden md:flex flex-1 min-w-0 flex-col">
-          {/* Active Folder Header Banner */}
-          <div className="px-5 py-3.5 bg-gradient-to-r from-slate-900 via-slate-900 to-slate-950 border-b border-slate-800 flex items-center justify-between gap-3 flex-wrap">
-            <div className="flex items-center gap-3 min-w-0">
-              <div
-                className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 shadow-lg ${
-                  isFavoritesPlaylist(activePlaylist)
-                    ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30 shadow-rose-900/30'
-                    : activePlaylist === 'OFFLINE'
-                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shadow-emerald-900/30'
-                    : 'bg-purple-600/20 text-purple-400 border border-purple-500/30 shadow-purple-900/30'
-                }`}
-              >
-                {isFavoritesPlaylist(activePlaylist) ? (
-                  <Heart className="w-5 h-5 fill-rose-500 text-rose-500" />
-                ) : activePlaylist === 'OFFLINE' ? (
-                  <HardDrive className="w-5 h-5 text-emerald-400" />
-                ) : activePlaylist === 'ALL' ? (
-                  <ListMusic className="w-5 h-5 text-purple-400" />
-                ) : (
-                  <Disc className="w-5 h-5 text-purple-400" />
-                )}
-              </div>
-
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-base font-bold text-white truncate">
-                    {isFavoritesPlaylist(activePlaylist)
-                      ? 'Carpeta de Canciones Favoritas'
-                      : activePlaylist === 'ALL'
-                      ? 'Todas las canciones'
-                      : activePlaylist === 'OFFLINE'
-                      ? 'Descargadas / Offline'
-                      : `Carpeta: ${activePlaylist}`}
-                  </h2>
-                  {isFavoritesPlaylist(activePlaylist) && (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 font-semibold">
-                      ♥ Todas con corazón
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-slate-400 truncate">
-                  <strong className="text-slate-200">{filteredTracks.length}</strong> canciones
-                  {selectedArtist && ` • Artista: ${selectedArtist}`}
-                  {searchQuery && ` • Búsqueda: "${searchQuery}"`}
-                  {' • '}
-                  Audio Completo disponible para escuchar y descargar
-                </p>
-              </div>
-            </div>
-
-            {/* Folder Actions: Play & Download Complete Folder */}
-            <div className="flex items-center gap-2 shrink-0">
-              {filteredTracks.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => playTrackDirect(filteredTracks[0], filteredTracks)}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs shadow-md shadow-purple-600/30 active:scale-95 transition-all"
-                  title="Reproducir canciones de esta carpeta"
-                >
-                  <Play className="w-3.5 h-3.5 fill-current" />
-                  <span>Reproducir</span>
-                </button>
-              )}
-
-              {/* REQUESTED BUTTON: Descargar Carpeta Completa (Offline) */}
-              <button
-                type="button"
-                onClick={() => handleOpenFolderDownload(activePlaylist === 'ALL' ? 'ALL' : activePlaylist)}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/25 active:scale-95 transition-all border border-emerald-400/30"
-                title="Descargar todas las canciones de esta carpeta en MP3 completo para escuchar offline"
-              >
-                <FolderDown className="w-4 h-4" />
-                <span>Descargar Carpeta Completa (Offline)</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => localAudioInputRef.current?.click()}
-                className="hidden xl:flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white border border-slate-700 text-xs font-medium transition-colors"
-                title="Importar archivos MP3 desde tu equipo a esta carpeta"
-              >
-                <Upload className="w-3.5 h-3.5 text-blue-400" />
-                <span>Importar MP3</span>
-              </button>
-            </div>
-          </div>
-
           <TrackTable
             tracks={filteredTracks}
             currentTrack={currentTrack}
@@ -1624,9 +1537,15 @@ export default function App() {
             }}
             offlineTrackIds={offlineTrackIds}
             activePlaylist={activePlaylist}
-            isFolderOffline={Boolean(offlinePlaylists[activePlaylist])}
+            isFolderOffline={Boolean(
+              offlinePlaylists[activePlaylist === 'ALL' ? 'ALL' : isFavoritesPlaylist(activePlaylist) ? 'Favorite Tracks' : activePlaylist] ||
+                (isFavoritesPlaylist(activePlaylist) && (offlinePlaylists['Favoritas'] || offlinePlaylists['Favorite Tracks']))
+            )}
             onToggleFolderOffline={handleTogglePlaylistOffline}
+            offlineSyncProgress={offlineSyncProgress}
             onDirectDownloadTrack={handleDirectDownloadTrack}
+            onOpenFolderDownloadModal={(folder) => handleOpenFolderDownload(folder || activePlaylist)}
+            onImportLocalAudio={() => localAudioInputRef.current?.click()}
           />
         </div>
       </div>
@@ -1791,9 +1710,11 @@ export default function App() {
         tracks={tracks}
         availablePlaylists={availablePlaylistNames}
         initialFolder={folderDownloadInitialName}
-        onTriggerImportLocal={() => localAudioInputRef.current?.click()}
-        offlinePlaylists={offlinePlaylists}
-        onToggleFolderOffline={handleTogglePlaylistOffline}
+        onImportLocalAudio={() => localAudioInputRef.current?.click()}
+        onRefreshOffline={async () => {
+          const ids = await getAllOfflineTrackIds();
+          setOfflineTrackIds(ids);
+        }}
       />
 
       {/* Song Discovery & Web Add Modal */}
@@ -1879,45 +1800,62 @@ export default function App() {
         isComplete={batchDownloadState.isComplete}
       />
 
-      {/* Offline Sync Progress Modal */}
+      {/* Non-blocking Background Offline Download Floating Pill (Never blocks, locks, or freezes the UI) */}
       {offlineSyncProgress && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="bg-slate-900 border border-emerald-500/40 rounded-3xl p-6 max-w-sm w-full shadow-2xl text-center flex flex-col items-center">
-            <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center mb-4 shadow-lg shadow-emerald-950/50">
-              <Loader2 className="w-7 h-7 animate-spin" />
+        <div className="fixed top-18 right-3 sm:right-6 z-40 max-w-xs sm:max-w-sm w-full bg-slate-900/98 border border-emerald-500/50 rounded-2xl p-3.5 shadow-2xl backdrop-blur-2xl animate-in slide-in-from-top-3 duration-200 text-left">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                <Loader2 className="w-4 h-4 animate-spin" />
+              </div>
+              <div className="min-w-0">
+                <h4 className="text-xs font-bold text-white truncate">
+                  Descargando en segundo plano
+                </h4>
+                <p className="text-[10px] text-emerald-400 font-semibold truncate">
+                  Carpeta: {offlineSyncProgress.playlistName}
+                </p>
+              </div>
             </div>
-            <h3 className="text-lg font-bold text-white mb-1">
-              Descargando para modo Offline
-            </h3>
-            <p className="text-xs text-emerald-400 font-semibold mb-3">
-              Carpeta: {offlineSyncProgress.playlistName}
-            </p>
-            <p className="text-xs text-slate-300 truncate max-w-full px-2 mb-4 font-medium">
-              {offlineSyncProgress.trackTitle}
-            </p>
-            {/* Progress Bar */}
-            <div className="w-full bg-slate-800 rounded-full h-2.5 overflow-hidden mb-2 border border-slate-700/60">
-              <div
-                className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full transition-all duration-200 rounded-full"
-                style={{
-                  width: `${Math.round((offlineSyncProgress.current / Math.max(1, offlineSyncProgress.total)) * 100)}%`,
-                }}
-              />
-            </div>
-            <div className="flex justify-between w-full text-[11px] text-slate-400 font-mono">
-              <span>{offlineSyncProgress.current} de {offlineSyncProgress.total} canciones</span>
-              <span>{Math.round((offlineSyncProgress.current / Math.max(1, offlineSyncProgress.total)) * 100)}%</span>
-            </div>
-            <p className="text-[10px] text-slate-400 mt-4 bg-slate-800/60 rounded-xl px-3 py-1.5 border border-slate-700/40">
-              Al finalizar, podrás escuchar todas las canciones sin conexión a internet ni consumo de datos.
-            </p>
+            {/* Cancel/Stop button */}
+            <button
+              type="button"
+              onClick={() => {
+                cancelOfflineSyncRef.current = true;
+                setOfflineSyncProgress(null);
+                showToast('Descarga en segundo plano pausada');
+              }}
+              className="p-1 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors text-xs font-semibold shrink-0"
+              title="Detener descarga en segundo plano"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <p className="text-[11px] text-slate-300 truncate mb-2 font-medium">
+            {offlineSyncProgress.trackTitle}
+          </p>
+
+          {/* Mini Progress Bar */}
+          <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden mb-1.5 border border-slate-700/60">
+            <div
+              className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full transition-all duration-200 rounded-full"
+              style={{
+                width: `${Math.round((offlineSyncProgress.current / Math.max(1, offlineSyncProgress.total)) * 100)}%`,
+              }}
+            />
+          </div>
+
+          <div className="flex justify-between text-[10px] text-slate-400 font-mono">
+            <span>{offlineSyncProgress.current} de {offlineSyncProgress.total} canciones</span>
+            <span>{Math.round((offlineSyncProgress.current / Math.max(1, offlineSyncProgress.total)) * 100)}%</span>
           </div>
         </div>
       )}
 
       {/* Interactive Toast Notifications */}
       {toastMessage && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-slate-900/95 border border-purple-500/50 text-white text-xs sm:text-sm font-semibold px-4 py-2.5 rounded-2xl shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 duration-200 flex items-center gap-2 pointer-events-none">
+        <div className="fixed bottom-36 md:bottom-28 left-1/2 -translate-x-1/2 z-50 bg-slate-900/95 border border-purple-500/50 text-white text-xs sm:text-sm font-semibold px-4 py-2.5 rounded-2xl shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 duration-200 flex items-center gap-2 pointer-events-none">
           <span>{toastMessage}</span>
         </div>
       )}

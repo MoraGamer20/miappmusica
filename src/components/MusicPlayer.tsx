@@ -128,15 +128,18 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({
   return (
     <>
       {/* =========================================
-          1. MOBILE MINI-PLAYER (< sm)
-          Thumb-friendly Spotify-style sticky dock above Bottom Navigation Bar
+          1. MOBILE MINI-PLAYER (< md)
+          Thumb-friendly Spotify-style sticky dock positioned completely above Bottom Navigation Bar
          ========================================= */}
-      <footer className="sm:hidden fixed bottom-16 left-0 right-0 z-30 bg-slate-900/95 border-t border-slate-800/80 backdrop-blur-xl shadow-2xl flex flex-col">
+      <footer
+        className="md:hidden fixed left-0 right-0 z-30 bg-slate-900/98 border-t border-slate-800 shadow-[0_-8px_30px_rgba(0,0,0,0.5)] backdrop-blur-2xl flex flex-col"
+        style={{ bottom: 'calc(4rem + env(safe-area-inset-bottom, 0px))' }}
+      >
         {/* Slim top progress line */}
         <div
           ref={mobileProgressRef}
           onClick={(e) => handleProgressBarClick(e, mobileProgressRef)}
-          className="w-full h-1 bg-slate-800 cursor-pointer relative"
+          className="w-full h-1 bg-slate-800/90 cursor-pointer relative"
         >
           <div
             className="h-full bg-gradient-to-r from-purple-500 to-indigo-500 transition-all duration-100"
@@ -144,12 +147,12 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({
           />
         </div>
 
-        {/* Mini-player content bar */}
-        <div className="flex items-center justify-between px-3 py-2 gap-2">
+        {/* Mini-player content bar: full height & unclipped controls */}
+        <div className="flex items-center justify-between px-3.5 py-2.5 h-16 gap-2.5">
           {/* Left: Album cover thumbnail */}
           <div
             onClick={onOpenFullPlayer}
-            className="relative w-11 h-11 rounded-lg overflow-hidden shrink-0 bg-slate-800 shadow cursor-pointer active:scale-95 transition-transform"
+            className="relative w-11 h-11 rounded-xl overflow-hidden shrink-0 bg-slate-800 shadow-md cursor-pointer active:scale-95 transition-transform border border-slate-700/50"
           >
             {currentTrack.coverUrl ? (
               <img
@@ -167,29 +170,29 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({
           {/* Middle: Title & Artist (tapping expands full player) */}
           <div
             onClick={onOpenFullPlayer}
-            className="flex-1 min-w-0 cursor-pointer pr-1"
+            className="flex-1 min-w-0 cursor-pointer pr-1 flex flex-col justify-center"
           >
-            <h4 className="text-xs font-semibold text-white truncate">
+            <h4 className="text-xs font-bold text-white truncate leading-tight">
               {currentTrack.title}
             </h4>
-            <div className="flex items-center gap-1.5 text-[10px] text-slate-400 truncate">
-              <span className="truncate">{currentTrack.artist}</span>
-              <span className="text-slate-600">·</span>
-              <span className="text-purple-400 font-mono">
+            <div className="flex items-center gap-1.5 text-[10px] text-slate-400 truncate mt-0.5">
+              <span className="truncate font-medium">{currentTrack.artist}</span>
+              <span className="text-slate-600 font-bold">·</span>
+              <span className="text-purple-400 font-mono font-semibold">
                 {formatTime(currentTime)} / {formatTime(duration)}
               </span>
             </div>
           </div>
 
           {/* Right: Quick Touch Actions */}
-          <div className="flex items-center gap-0.5 shrink-0">
+          <div className="flex items-center gap-1 shrink-0">
             {/* Equalizer Quick Button */}
             {onOpenEqualizer && (
               <button
                 type="button"
                 onClick={onOpenEqualizer}
                 aria-label="Abrir Ecualizador"
-                className="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-purple-400 active:scale-90 transition-transform"
+                className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-purple-400 active:scale-90 transition-transform rounded-lg"
                 title="Ecualizador"
               >
                 <Sliders className="w-4 h-4 text-purple-400" />
@@ -201,19 +204,19 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({
               type="button"
               onClick={() => onToggleFavorite(currentTrack.id)}
               aria-label={currentTrack.isFavorite ? 'Quitar de favoritos' : 'Añadir a favoritos'}
-              className="w-9 h-9 flex items-center justify-center text-slate-400 active:scale-90 transition-transform"
+              className="w-8 h-8 flex items-center justify-center text-slate-400 active:scale-90 transition-transform rounded-lg"
             >
               <Heart
                 className={`w-4 h-4 ${currentTrack.isFavorite ? 'text-rose-500 fill-rose-500' : ''}`}
               />
             </button>
 
-            {/* Play/Pause Button */}
+            {/* Play/Pause Button - fully contained, prominent, no clipping */}
             <button
               type="button"
               onClick={onTogglePlay}
               aria-label={isPlaying ? 'Pausar' : 'Reproducir'}
-              className="w-10 h-10 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-500 text-white flex items-center justify-center shadow-md shadow-purple-600/30 active:scale-95 transition-transform ml-0.5"
+              className="w-10 h-10 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white flex items-center justify-center shadow-lg shadow-purple-600/40 active:scale-95 transition-transform shrink-0 ml-0.5"
             >
               {isPlaying ? (
                 <Pause className="w-5 h-5 fill-current" />
@@ -227,7 +230,7 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({
               type="button"
               onClick={onOpenFullPlayer}
               aria-label="Expandir reproductor"
-              className="w-9 h-9 flex items-center justify-center text-slate-400 active:text-white"
+              className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-white active:scale-90 transition-transform rounded-lg"
             >
               <Maximize2 className="w-4 h-4" />
             </button>
@@ -236,10 +239,10 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({
       </footer>
 
       {/* =========================================
-          2. DESKTOP FULL-FEATURED PLAYER (sm and up)
+          2. DESKTOP FULL-FEATURED PLAYER (md and up)
           Three-zone high-fidelity audio dashboard
          ========================================= */}
-      <footer className="hidden sm:flex fixed bottom-0 left-0 right-0 h-22 bg-slate-900/95 border-t border-slate-800 text-white flex-col justify-between px-6 py-2.5 z-30 backdrop-blur-xl shadow-2xl">
+      <footer className="hidden md:flex fixed bottom-0 left-0 right-0 h-22 bg-slate-900/98 border-t border-slate-800 text-white flex-col justify-between px-6 py-2.5 z-30 backdrop-blur-2xl shadow-2xl">
         {/* Top Timeline Slider */}
         <div
           ref={progressBarRef}

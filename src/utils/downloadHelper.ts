@@ -1,8 +1,8 @@
 import JSZip from 'jszip';
 import { Track } from '../types/music';
 import { exportToCSV, generateM3U } from './csvParser';
-import { getOfflineAudioBlob, saveOfflineAudio } from './offlineAudioStorage';
 import { getTrackDetails } from './deezerService';
+import { saveOfflineAudio } from './offlineAudioStorage';
 
 /**
  * Downloads a single file in the browser using an anchor tag and Blob / ObjectURL.
@@ -35,7 +35,7 @@ export function downloadTracksAsCSV(tracks: Track[], filename = 'Biblioteca_Canc
 }
 
 /**
- * Exports current tracks as M3U Playlist for mobile audio players (VLC, Poweramp, etc.).
+ * Exports current tracks as M3U Playlist.
  */
 export function downloadTracksAsM3U(tracks: Track[], playlistName = 'Mi Playlist') {
   const m3u = generateM3U(tracks, playlistName);
@@ -52,123 +52,160 @@ export function downloadTracksAsJSON(tracks: Track[], filename = 'Biblioteca_Can
 }
 
 /**
- * Downloads a single track's full audio directly to the user's device as an MP3 file.
- * NEVER REDIRECTS TO THIRD PARTY SPAM (yout.com, etc.).
- * 1. Checks if the audio blob is already cached in IndexedDB.
- * 2. If not, fetches the audio stream, stores it for offline playback, and downloads the .mp3 file.
+ * Downloads the MP3 audio for a track and caches it in IndexedDB for offline app playback.
  */
-export async function downloadTrackAudio(
-  track: Track,
-  onProgress?: (statusText: string) => void
-): Promise<boolean> {
+export async function downloadTrackAudio(track: Track): Promise<boolean> {
   try {
+    let previewUrl = track.previewUrl;
+    if (!previewUrl) {
+      const details = await getTrackDetails(track);
+      previewUrl = details.previewUrl;
+    }
+
+    if (!previewUrl) {
+      throw new Error('No se encontró archivo de audio para esta pista.');
+    }
+
+    const response = await fetch(previewUrl);
+    if (!response.ok) throw new Error('Error al descargar el audio desde la red.');
+    const blob = await response.blob();
+
+    // Cache in IndexedDB for in-app offline playback
+    try {
+      await saveOfflineAudio(track, blob);
+    } catch {}
+
     const safeArtist = (track.artist || 'Artista').replace(/[/\\?%*:|"<>]/g, '_');
-    const safeTitle = (track.title || 'Cancion').replace(/[/\\?%*:|"<>]/g, '_');
-    const filename = `${safeArtist} - ${safeTitle}.mp3`;
-
-    // 1. Check local offline storage
-    let blob = await getOfflineAudioBlob(track.id);
-
-    // 2. If not stored locally, fetch audio from source
-    if (!blob) {
-      onProgress?.('Obteniendo audio de la canción...');
-      let audioUrl = track.previewUrl;
-
-      if (!audioUrl) {
-        const details = await getTrackDetails(track);
-        if (details.previewUrl) {
-          audioUrl = details.previewUrl;
-        }
-      }
-
-      if (audioUrl) {
-        onProgress?.('Descargando archivo MP3...');
-        const res = await fetch(audioUrl);
-        if (res.ok) {
-          blob = await res.blob();
-          // Store in offline IndexedDB so it's instantly available without internet
-          try {
-            await saveOfflineAudio(track, blob);
-          } catch {}
-        }
-      }
-    }
-
-    // 3. Trigger direct browser file download
-    if (blob) {
-      onProgress?.('Guardando archivo...');
-      triggerFileDownload(blob, filename);
-      return true;
-    }
-
-    return false;
+    const safeTitle = (track.title || 'Canción').replace(/[/\\?%*:|"<>]/g, '_');
+    triggerFileDownload(blob, `${safeArtist} - ${safeTitle}.mp3`);
+    return true;
   } catch (err) {
-    console.error('Failed to trigger direct MP3 download', err);
+    console.error('Failed to download single track audio', err);
     return false;
   }
 }
 
 /**
- * Batch downloads multiple tracks into a single .zip file containing the actual .mp3 files!
- * "Descargar por bloques la música": Downloads the block of songs with real audio files.
+ * Caches an entire list/folder of tracks into IndexedDB for offline app playback
  */
-export async function downloadBatchZip(
+export async function cacheTracksForOffline(
   tracks: Track[],
-  zipFilename = 'Bloque_Canciones.zip',
-  onProgress?: (current: number, total: number, currentTrackTitle: string) => void
+  onProgress?: (current: number, total: number, statusText: string) => void
+): Promise<{ successCount: number; failCount: number }> {
+  let successCount = 0;
+  let failCount = 0;
+  const total = tracks.length;
+
+  for (let i = 0; i < tracks.length; i++) {
+    const track = tracks[i];
+    onProgress?.(i + 1, total, `${track.artist} - ${track.title}`);
+
+    try {
+      let previewUrl = track.previewUrl;
+      if (!previewUrl) {
+        const details = await getTrackDetails(track);
+        previewUrl = details.previewUrl;
+      }
+
+      if (previewUrl) {
+        const res = await fetch(previewUrl);
+        if (res.ok) {
+          const blob = await res.blob();
+          await saveOfflineAudio(track, blob);
+          successCount++;
+          continue;
+        }
+      }
+      failCount++;
+    } catch {
+      failCount++;
+    }
+  }
+
+  return { successCount, failCount };
+}
+
+/**
+ * Downloads tracks organized by playlist subfolders inside a ZIP file.
+ * Folder structure:
+ * - Canciones_Por_Carpeta.zip
+ *   ├── Favorite Tracks/
+ *   │   ├── 01. Morat - Besos En Guerra.mp3
+ *   │   └── playlist.m3u
+ *   ├── Tarea/
+ *   │   ├── 01. Ed Maverick - Fuentes de Ortiz.mp3
+ *   │   └── playlist.m3u
+ *   └── Biblioteca_Completa.csv
+ */
+export async function downloadTracksByFolderZip(
+  tracks: Track[],
+  zipFilename = 'Biblioteca_Deezer_Por_Carpetas.zip',
+  onProgress?: (current: number, total: number, statusText: string) => void
 ): Promise<{ successCount: number; failCount: number }> {
   const zip = new JSZip();
   let successCount = 0;
   let failCount = 0;
   const total = tracks.length;
 
-  for (let i = 0; i < tracks.length; i++) {
-    const t = tracks[i];
-    onProgress?.(i + 1, total, `${t.artist} - ${t.title}`);
+  // Group tracks by playlist
+  const grouped: Record<string, Track[]> = {};
+  for (const t of tracks) {
+    let plName = (t.playlist || 'General').trim();
+    if (t.isFavorite && (!plName || plName.toLowerCase().includes('favorit'))) {
+      plName = 'Favoritas';
+    }
+    const safeFolderName = plName.replace(/[/\\?%*:|"<>]/g, '_');
+    if (!grouped[safeFolderName]) grouped[safeFolderName] = [];
+    grouped[safeFolderName].push(t);
+  }
 
-    try {
-      let blob = await getOfflineAudioBlob(t.id);
+  // Add overall CSV
+  zip.file('Biblioteca_Completa.csv', exportToCSV(tracks));
 
-      if (!blob && t.previewUrl) {
-        const res = await fetch(t.previewUrl);
-        if (res.ok) {
-          blob = await res.blob();
-          try {
-            await saveOfflineAudio(t, blob);
-          } catch {}
+  let processed = 0;
+
+  for (const [folderName, folderTracks] of Object.entries(grouped)) {
+    const folder = zip.folder(folderName);
+    // Add folder-specific M3U playlist
+    folder?.file(`${folderName}.m3u`, generateM3U(folderTracks, folderName));
+
+    for (let i = 0; i < folderTracks.length; i++) {
+      const track = folderTracks[i];
+      processed++;
+      onProgress?.(processed, total, `[${folderName}] ${track.artist} - ${track.title}`);
+
+      try {
+        let previewUrl = track.previewUrl;
+        if (!previewUrl) {
+          const details = await getTrackDetails(track);
+          previewUrl = details.previewUrl;
         }
-      } else if (!blob) {
-        const details = await getTrackDetails(t);
-        if (details.previewUrl) {
-          const res = await fetch(details.previewUrl);
+
+        if (previewUrl) {
+          const res = await fetch(previewUrl);
           if (res.ok) {
-            blob = await res.blob();
+            const blob = await res.blob();
+            // Cache in IndexedDB for offline app playback
             try {
-              await saveOfflineAudio(t, blob);
+              await saveOfflineAudio(track, blob);
             } catch {}
+
+            const safeArtist = (track.artist || 'Artista').replace(/[/\\?%*:|"<>]/g, '_');
+            const safeTitle = (track.title || 'Cancion').replace(/[/\\?%*:|"<>]/g, '_');
+            const trackNum = String(i + 1).padStart(2, '0');
+            folder?.file(`${trackNum}. ${safeArtist} - ${safeTitle}.mp3`, blob);
+            successCount++;
+            continue;
           }
         }
-      }
-
-      const safeArtist = (t.artist || 'Artista').replace(/[/\\?%*:|"<>]/g, '_');
-      const safeTitle = (t.title || 'Cancion').replace(/[/\\?%*:|"<>]/g, '_');
-
-      if (blob) {
-        zip.file(`${safeArtist} - ${safeTitle}.mp3`, blob);
-        successCount++;
-      } else {
+        failCount++;
+      } catch {
         failCount++;
       }
-    } catch {
-      failCount++;
     }
   }
 
-  // Include playlist and database in the block
-  zip.file('Lista_Reproduccion.m3u', generateM3U(tracks, 'Bloque_Descarga'));
-  zip.file('Canciones_Metadatos.csv', exportToCSV(tracks));
-
-  onProgress?.(total, total, 'Empaquetando archivo ZIP...');
+  onProgress?.(total, total, 'Empaquetando archivo ZIP por carpetas...');
   const zipBlob = await zip.generateAsync({ type: 'blob' });
   triggerFileDownload(zipBlob, zipFilename);
 
@@ -176,16 +213,84 @@ export async function downloadBatchZip(
 }
 
 /**
- * Downloads tracks organized by playlist subfolders inside a ZIP file with actual MP3s.
+ * Batch downloads multiple tracks into a single .zip file.
  */
-export async function downloadTracksByFolderZip(
+export async function downloadBatchZip(
   tracks: Track[],
-  zipFilename = 'Biblioteca_Canciones_Movil.zip',
-  onProgress?: (current: number, total: number, statusText: string) => void
+  zipFilename = 'Canciones_Deezer.zip',
+  onProgress?: (current: number, total: number, currentTrackTitle: string) => void
 ): Promise<{ successCount: number; failCount: number }> {
-  return downloadBatchZip(tracks, zipFilename, (current, total, title) => {
-    onProgress?.(current, total, `Descargando: ${title}`);
-  });
+  return downloadTracksByFolderZip(tracks, zipFilename, onProgress);
+}
+
+/**
+ * Downloads files directly to a folder on the user's computer via File System Access API
+ */
+export async function downloadToLocalDirectoryPicker(
+  tracks: Track[],
+  onProgress?: (current: number, total: number, statusText: string) => void
+): Promise<{ successCount: number; failCount: number } | null> {
+  if (typeof window === 'undefined' || !(window as any).showDirectoryPicker) {
+    return null; // Not supported in Firefox / Safari, falls back to ZIP
+  }
+
+  try {
+    const dirHandle = await (window as any).showDirectoryPicker();
+    let successCount = 0;
+    let failCount = 0;
+    const total = tracks.length;
+
+    for (let i = 0; i < tracks.length; i++) {
+      const track = tracks[i];
+      onProgress?.(i + 1, total, `${track.artist} - ${track.title}`);
+
+      try {
+        let previewUrl = track.previewUrl;
+        if (!previewUrl) {
+          const details = await getTrackDetails(track);
+          previewUrl = details.previewUrl;
+        }
+
+        if (previewUrl) {
+          const res = await fetch(previewUrl);
+          if (res.ok) {
+            const blob = await res.blob();
+            // Cache in IndexedDB
+            try {
+              await saveOfflineAudio(track, blob);
+            } catch {}
+
+            // Playlist subfolder
+            const plName = (track.playlist || 'General').replace(/[/\\?%*:|"<>]/g, '_');
+            const subDirHandle = await dirHandle.getDirectoryHandle(plName, { create: true });
+
+            const safeArtist = (track.artist || 'Artista').replace(/[/\\?%*:|"<>]/g, '_');
+            const safeTitle = (track.title || 'Cancion').replace(/[/\\?%*:|"<>]/g, '_');
+            const fileHandle = await subDirHandle.getFileHandle(`${safeArtist} - ${safeTitle}.mp3`, {
+              create: true,
+            });
+            const writable = await fileHandle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+
+            successCount++;
+            continue;
+          }
+        }
+        failCount++;
+      } catch {
+        failCount++;
+      }
+    }
+
+    return { successCount, failCount };
+  } catch (err: any) {
+    if (err.name === 'AbortError') {
+      return null;
+    }
+    console.error('Error saving directly to directory', err);
+    return null;
+  }
 }
 
 /**

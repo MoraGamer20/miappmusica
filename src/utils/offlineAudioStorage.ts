@@ -1,4 +1,5 @@
 import { Track } from '../types/music';
+import { getTrackDetails } from './deezerService';
 
 const DB_NAME = 'deezer_offline_audio_db';
 const DB_VERSION = 1;
@@ -244,35 +245,63 @@ export async function importLocalAudioFiles(
 
 /**
  * Downloads and caches all tracks of a playlist into IndexedDB for 100% offline playback.
+ * Supports concurrent batching for speed and cancellation checks without blocking the UI.
  */
 export async function downloadAndSavePlaylistOffline(
   tracks: Track[],
-  onProgress?: (current: number, total: number, trackTitle: string) => void
+  onProgress?: (current: number, total: number, trackTitle: string, currentTrackId?: string) => void,
+  onTrackSaved?: (trackId: string) => void,
+  isCancelled?: () => boolean
 ): Promise<string[]> {
   const savedIds: string[] = [];
   const total = tracks.length;
+  if (total === 0) return savedIds;
 
-  for (let i = 0; i < tracks.length; i++) {
-    const t = tracks[i];
-    onProgress?.(i + 1, total, `${t.artist} - ${t.title}`);
+  let completedCount = 0;
+  const CONCURRENCY = 3;
+  let currentIndex = 0;
 
-    try {
-      let blob = await getOfflineAudioBlob(t.id);
-      if (!blob && t.previewUrl) {
-        const res = await fetch(t.previewUrl);
-        if (res.ok) {
-          blob = await res.blob();
-          await saveOfflineAudio(t, blob);
+  async function worker() {
+    while (currentIndex < tracks.length) {
+      if (isCancelled?.()) break;
+      const i = currentIndex++;
+      const t = tracks[i];
+      if (!t) break;
+
+      onProgress?.(completedCount + 1, total, `${t.artist} - ${t.title}`, t.id);
+
+      try {
+        let blob = await getOfflineAudioBlob(t.id);
+        if (!blob) {
+          let previewUrl = t.previewUrl;
+          if (!previewUrl) {
+            const details = await getTrackDetails(t);
+            previewUrl = details.previewUrl;
+          }
+          if (previewUrl && !isCancelled?.()) {
+            const res = await fetch(previewUrl);
+            if (res.ok) {
+              blob = await res.blob();
+              await saveOfflineAudio(t, blob);
+            }
+          }
         }
-      }
 
-      if (blob) {
-        savedIds.push(t.id);
+        if (blob) {
+          savedIds.push(t.id);
+          onTrackSaved?.(t.id);
+        }
+      } catch (e) {
+        console.warn('Error saving offline track in playlist batch', t.id, e);
+      } finally {
+        completedCount++;
+        onProgress?.(completedCount, total, `${t.artist} - ${t.title}`, t.id);
       }
-    } catch (e) {
-      console.warn('Error saving offline track in playlist batch', t.id, e);
     }
   }
+
+  const workers = Array.from({ length: Math.min(CONCURRENCY, tracks.length) }, () => worker());
+  await Promise.all(workers);
 
   return savedIds;
 }

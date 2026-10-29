@@ -1,33 +1,31 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   FolderDown,
-  Download,
-  CheckCircle2,
-  ListMusic,
-  FileSpreadsheet,
-  FileJson,
-  Upload,
-  Heart,
-  Music,
-  Sparkles,
-  Smartphone,
-  Search,
-  ExternalLink,
-  Disc,
   FolderArchive,
   HardDrive,
-  FileArchive,
+  Download,
+  CheckCircle2,
+  HelpCircle,
+  Folder,
+  Terminal,
+  Heart,
+  Upload,
+  Sparkles,
+  Music,
+  Check,
+  Copy,
 } from 'lucide-react';
 import { Track } from '../types/music';
 import {
   downloadTracksByFolderZip,
-  downloadBatchZip,
-  downloadTrackAudio,
+  downloadToLocalDirectoryPicker,
   downloadTracksAsM3U,
-  downloadTracksAsCSV,
-  downloadTracksAsJSON,
+  downloadTextFile,
+  cacheTracksForOffline,
 } from '../utils/downloadHelper';
+import { generateBulkDownloadScripts } from '../utils/fullAudioService';
+import { isFavoritesPlaylist } from '../App';
 
 interface FolderDownloadModalProps {
   isOpen: boolean;
@@ -35,9 +33,8 @@ interface FolderDownloadModalProps {
   tracks: Track[];
   availablePlaylists: string[];
   initialFolder?: string;
-  onTriggerImportLocal?: () => void;
-  offlinePlaylists?: Record<string, boolean>;
-  onToggleFolderOffline?: (folderName: string) => void;
+  onImportLocalAudio?: () => void;
+  onRefreshOffline?: () => void;
 }
 
 export const FolderDownloadModal: React.FC<FolderDownloadModalProps> = ({
@@ -46,128 +43,152 @@ export const FolderDownloadModal: React.FC<FolderDownloadModalProps> = ({
   tracks,
   availablePlaylists,
   initialFolder = 'ALL',
-  onTriggerImportLocal,
-  offlinePlaylists = {},
-  onToggleFolderOffline,
+  onImportLocalAudio,
+  onRefreshOffline,
 }) => {
-  const [selectedFolder, setSelectedFolder] = useState<string>('ALL');
-  const [activeTab, setActiveTab] = useState<'songs' | 'export' | 'offline'>('songs');
-  const [filterSearch, setFilterSearch] = useState('');
-  const [isPackagingZip, setIsPackagingZip] = useState(false);
-  const [zipFinished, setZipFinished] = useState(false);
-  const [zipProgress, setZipProgress] = useState<{ current: number; total: number; statusText: string }>({
+  const [selectedFolder, setSelectedFolder] = useState<string>(initialFolder);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [progress, setProgress] = useState<{ current: number; total: number; statusText: string }>({
     current: 0,
     total: 0,
     statusText: '',
   });
-  const [downloadingSongId, setDownloadingSongId] = useState<string | null>(null);
+  const [finishedMessage, setFinishedMessage] = useState<string | null>(null);
+  const [hasCopiedScript, setHasCopiedScript] = useState(false);
 
-  // Sync initial folder when modal opens
+  // Sync with initialFolder when opened
   useEffect(() => {
     if (isOpen) {
-      if (initialFolder) {
-        setSelectedFolder(initialFolder);
-      }
-      setFilterSearch('');
-      setZipFinished(false);
+      setSelectedFolder(initialFolder || 'ALL');
+      setFinishedMessage(null);
+      setProgress({ current: 0, total: 0, statusText: '' });
     }
   }, [isOpen, initialFolder]);
 
-  // Filter target tracks for the chosen folder
-  const isFavorites =
-    selectedFolder.toLowerCase() === 'favorite tracks' ||
-    selectedFolder.toLowerCase() === 'favoritas' ||
-    selectedFolder.toLowerCase() === 'favoritos' ||
-    selectedFolder.toLowerCase() === 'canciones favoritas';
-
-  const targetTracks = useMemo(() => {
-    if (!isOpen) return [];
-    if (selectedFolder === 'ALL') return tracks;
-    if (isFavorites) {
-      return tracks.filter((t) => Boolean(t.isFavorite || t.playlist?.toLowerCase().includes('favorit')));
-    }
-    return tracks.filter((t) => (t.playlist || 'General').toLowerCase() === selectedFolder.toLowerCase());
-  }, [isOpen, selectedFolder, isFavorites, tracks]);
-
-  const safeFolderName =
-    selectedFolder === 'ALL'
-      ? 'Biblioteca_Completa'
-      : isFavorites
-      ? 'Favoritas'
-      : selectedFolder.replace(/[/\\?%*:|"<>]/g, '_');
-
-  // Filter songs by search term
-  const filteredTracks = useMemo(() => {
-    if (!isOpen || !filterSearch.trim()) return targetTracks;
-    const q = filterSearch.toLowerCase().trim();
-    return targetTracks.filter(
-      (t) =>
-        t.title.toLowerCase().includes(q) ||
-        t.artist.toLowerCase().includes(q) ||
-        (t.album && t.album.toLowerCase().includes(q))
-    );
-  }, [isOpen, targetTracks, filterSearch]);
-
   if (!isOpen) return null;
 
-  const handleDownloadSongMP3 = async (track: Track) => {
-    setDownloadingSongId(track.id);
-    try {
-      await downloadTrackAudio(track);
-    } finally {
-      setDownloadingSongId(null);
+  // Filter target tracks for the chosen folder
+  // If Favoritas / Corazón is selected, capture ALL songs where isFavorite is true
+  const isFav = isFavoritesPlaylist(selectedFolder);
+  const targetTracks: Track[] =
+    selectedFolder === 'ALL'
+      ? tracks
+      : isFav
+      ? tracks.filter((t) => Boolean(t.isFavorite))
+      : tracks.filter(
+          (t) => (t.playlist || 'General').toLowerCase() === selectedFolder.toLowerCase()
+        );
+
+  const cleanFolderName = isFav
+    ? 'Favoritas'
+    : selectedFolder === 'ALL'
+    ? 'Biblioteca_Completa'
+    : selectedFolder.replace(/[/\\?%*:|"<>]/g, '_');
+
+  // Method 1: Generate Full-Length Audio Batch Downloader Scripts (320kbps MP3s without 30s cut)
+  const handleDownloadFullLengthScripts = () => {
+    const scripts = generateBulkDownloadScripts(targetTracks, `Carpeta_${cleanFolderName}`);
+    
+    // Download Windows .bat
+    downloadTextFile(
+      scripts.batScript,
+      `Descargar_${cleanFolderName}_Completas.bat`,
+      'application/x-bat;charset=utf-8'
+    );
+
+    // Also download M3U playlist file for convenient playback
+    downloadTracksAsM3U(targetTracks, cleanFolderName);
+
+    setFinishedMessage(
+      `¡Script de descarga completa generado para "${cleanFolderName}" (${targetTracks.length} canciones)! Ejecútalo en tu PC para descargar todas las canciones completas a 320kbps sin recorte de 30 segundos.`
+    );
+  };
+
+  // Method 1b: Mac/Linux Shell Script
+  const handleDownloadShScript = () => {
+    const scripts = generateBulkDownloadScripts(targetTracks, `Carpeta_${cleanFolderName}`);
+    downloadTextFile(
+      scripts.shScript,
+      `Descargar_${cleanFolderName}_Completas.sh`,
+      'application/x-sh;charset=utf-8'
+    );
+    setFinishedMessage(
+      `¡Script bash para macOS/Linux generado! Dale permisos con 'chmod +x' y ejecútalo para descargar todas las canciones completas.`
+    );
+  };
+
+  // Method 2: Cache entire folder into browser IndexedDB for offline in-app playback
+  const handleSaveToAppOffline = async () => {
+    setIsProcessing(true);
+    setFinishedMessage(null);
+
+    const result = await cacheTracksForOffline(targetTracks, (current, total, statusText) => {
+      setProgress({ current, total, statusText });
+    });
+
+    setIsProcessing(false);
+    onRefreshOffline?.();
+    setFinishedMessage(
+      `¡Se guardaron ${result.successCount} canciones de "${cleanFolderName}" en la memoria offline de la app! Ya puedes escucharlas sin internet en la sección "Descargadas / Offline".`
+    );
+  };
+
+  // Method 3: Download structured ZIP with subfolders per playlist
+  const handleDownloadZipByFolder = async () => {
+    setIsProcessing(true);
+    setFinishedMessage(null);
+
+    const safeName =
+      selectedFolder === 'ALL'
+        ? 'Biblioteca_Deezer_Por_Carpetas.zip'
+        : `Carpeta_${cleanFolderName}.zip`;
+
+    await downloadTracksByFolderZip(targetTracks, safeName, (current, total, statusText) => {
+      setProgress({ current, total, statusText });
+    });
+
+    setIsProcessing(false);
+    setFinishedMessage(
+      `¡Archivo ZIP descargado con éxito con la estructura de subcarpetas y lista .M3U!`
+    );
+  };
+
+  // Method 4: Save directly into a chosen folder on PC (Chrome, Edge, Opera)
+  const handleSaveToDirectory = async () => {
+    setIsProcessing(true);
+    setFinishedMessage(null);
+
+    const result = await downloadToLocalDirectoryPicker(targetTracks, (current, total, statusText) => {
+      setProgress({ current, total, statusText });
+    });
+
+    setIsProcessing(false);
+    if (result) {
+      setFinishedMessage(
+        `¡Se guardaron ${result.successCount} canciones directamente en la carpeta elegida de tu disco duro!`
+      );
     }
   };
 
-  const handleDownloadM3U = () => {
-    downloadTracksAsM3U(targetTracks, safeFolderName);
-  };
-
-  const handleDownloadCSV = () => {
-    downloadTracksAsCSV(targetTracks, `${safeFolderName}.csv`);
-  };
-
-  const handleDownloadJSON = () => {
-    downloadTracksAsJSON(targetTracks, `${safeFolderName}.json`);
-  };
-
-  const handleDownloadZip = async () => {
-    setIsPackagingZip(true);
-    setZipFinished(false);
-
-    const zipName =
-      selectedFolder === 'ALL'
-        ? 'Biblioteca_Deezer_Movil.zip'
-        : `Carpeta_${safeFolderName}_Movil.zip`;
-
-    await downloadTracksByFolderZip(targetTracks, zipName, (current, total, statusText) => {
-      setZipProgress({ current, total, statusText });
-    });
-
-    setIsPackagingZip(false);
-    setZipFinished(true);
-  };
-
-  const zipPercent = zipProgress.total > 0 ? Math.round((zipProgress.current / zipProgress.total) * 100) : 0;
+  const percent = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
+  const hasFileSystemAccess = typeof window !== 'undefined' && 'showDirectoryPicker' in window;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-150">
-      <div className="relative w-full max-w-xl bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-2xl text-slate-100 flex flex-col max-h-[92vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-150">
+      <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-7 shadow-2xl text-slate-100 flex flex-col max-h-[92vh] overflow-y-auto">
         {/* Header */}
-        <div className="flex items-center justify-between pb-3.5 border-b border-slate-800">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-purple-600 via-indigo-600 to-emerald-500 flex items-center justify-center text-white shadow-lg shadow-purple-500/20 shrink-0">
+        <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-purple-600 via-indigo-600 to-rose-500 flex items-center justify-center text-white shadow-lg shadow-purple-500/20">
               <FolderDown className="w-5 h-5" />
             </div>
-            <div className="min-w-0">
-              <h3 className="text-base font-bold text-white flex items-center gap-1.5 truncate">
-                Descargador Móvil por Carpeta
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold">
-                  Audio Completo
-                </span>
+            <div>
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <span>Descargar Carpeta de Canciones</span>
+                {isFav && <span className="text-xs bg-rose-500/20 text-rose-400 border border-rose-500/30 px-2 py-0.5 rounded-full font-semibold">Favoritas ❤️</span>}
               </h3>
-              <p className="text-xs text-slate-400 truncate">
-                Descarga canciones completas en MP3 directo a tu celular
+              <p className="text-xs text-slate-400">
+                Descarga canciones completas (320kbps) y guárdalas para escuchar offline sin internet
               </p>
             </div>
           </div>
@@ -175,56 +196,37 @@ export const FolderDownloadModal: React.FC<FolderDownloadModalProps> = ({
             type="button"
             onClick={onClose}
             aria-label="Cerrar modal"
-            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors shrink-0"
+            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Mobile Device Notice */}
-        <div className="my-3 p-3 rounded-2xl bg-gradient-to-r from-emerald-950/40 to-slate-900 border border-emerald-500/30 flex items-center gap-2.5">
-          <Smartphone className="w-4 h-4 text-emerald-400 shrink-0" />
-          <p className="text-xs text-emerald-200/90 leading-relaxed">
-            <strong className="text-white">100% Optimizado para Celular:</strong> Cero fragmentos de 30s. Descarga canciones completas directamente a la carpeta de descargas de tu teléfono.
-          </p>
-        </div>
-
-        {/* Folder Selector Banner */}
-        <div className="mb-3 p-3 rounded-2xl bg-slate-800/60 border border-slate-700/60 flex flex-wrap items-center justify-between gap-2.5">
-          <div className="min-w-0">
-            <span className="block text-[11px] font-bold text-purple-300 uppercase tracking-wider mb-0.5">
-              Carpeta / Playlist:
-            </span>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-300">
-                <strong className="text-white font-bold">{targetTracks.length} canciones</strong> disponibles
-              </span>
-              {isFavorites && (
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 font-semibold flex items-center gap-1">
-                  <Heart className="w-3 h-3 fill-rose-400" /> Favoritas
-                </span>
-              )}
-            </div>
+        {/* Folder / Playlist Selector */}
+        <div className="my-4 p-4 rounded-2xl bg-slate-800/70 border border-slate-700/70 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <label className="block text-xs font-bold text-purple-300 uppercase tracking-wider mb-1">
+              Carpeta a Procesar:
+            </label>
+            <p className="text-xs text-slate-300">
+              Canciones seleccionadas: <strong className="text-white font-bold">{targetTracks.length} canciones</strong>
+              {isFav && <span className="text-rose-400 font-semibold ml-1">(Todas con corazón)</span>}
+            </p>
           </div>
 
           <select
             value={selectedFolder}
             onChange={(e) => {
               setSelectedFolder(e.target.value);
-              setZipFinished(false);
+              setFinishedMessage(null);
             }}
-            className="bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-purple-500 font-semibold cursor-pointer max-w-full"
+            disabled={isProcessing}
+            className="bg-slate-900 border border-purple-500/40 text-white rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-purple-400 font-semibold cursor-pointer max-w-xs"
           >
-            <option value="ALL">📁 Toda la biblioteca ({tracks.length})</option>
-            <option value="Favorite Tracks">
-              ❤️ Favoritas ({tracks.filter((t) => t.isFavorite).length})
-            </option>
+            <option value="Favoritas ❤️">❤️ Favoritas (Canciones con Corazón: {tracks.filter((t) => t.isFavorite).length})</option>
+            <option value="ALL">📁 Todas las canciones ({tracks.length})</option>
             {availablePlaylists
-              .filter(
-                (pl) =>
-                  pl.toLowerCase() !== 'favorite tracks' &&
-                  pl.toLowerCase() !== 'favoritas'
-              )
+              .filter((pl) => !isFavoritesPlaylist(pl))
               .map((pl) => (
                 <option key={pl} value={pl}>
                   📂 {pl} ({tracks.filter((t) => t.playlist === pl).length})
@@ -233,330 +235,192 @@ export const FolderDownloadModal: React.FC<FolderDownloadModalProps> = ({
           </select>
         </div>
 
-        {/* Offline Switch & Batch Download Bar */}
-        <div className="mb-3 p-3 rounded-2xl bg-slate-800/80 border border-slate-700/80 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div
-              className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
-                offlinePlaylists[selectedFolder]
-                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
-                  : 'bg-slate-800 text-slate-400'
-              }`}
-            >
-              <HardDrive className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <span className="text-xs font-bold text-white flex items-center gap-1.5 truncate">
-                Descargar para escuchar sin conexión
-                {offlinePlaylists[selectedFolder] && (
-                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-500/30">
-                    ✓ Activado
-                  </span>
-                )}
-              </span>
-              <p className="text-[10px] text-slate-400 truncate">
-                {offlinePlaylists[selectedFolder]
-                  ? 'Canciones guardadas en este celular • Reproduce sin internet'
-                  : 'Guarda todas las canciones de esta carpeta para escuchar sin conexión'}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            {/* Quick Batch Download Block Button */}
-            <button
-              type="button"
-              onClick={handleDownloadZip}
-              disabled={isPackagingZip}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white shadow-md active:scale-95 transition-all disabled:opacity-50"
-              title="Descargar este bloque de canciones completo en archivo ZIP"
-            >
-              <FileArchive className="w-3.5 h-3.5" />
-              <span>{isPackagingZip ? 'Empaquetando...' : 'Descargar Bloque ZIP'}</span>
-            </button>
-
-            {/* Toggle Switch */}
-            {onToggleFolderOffline && (
-              <button
-                type="button"
-                role="switch"
-                aria-checked={Boolean(offlinePlaylists[selectedFolder])}
-                onClick={() => onToggleFolderOffline(selectedFolder)}
-                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                  offlinePlaylists[selectedFolder] ? 'bg-emerald-600' : 'bg-slate-700'
-                }`}
-                title={
-                  offlinePlaylists[selectedFolder]
-                    ? 'Desactivar descarga sin conexión'
-                    : 'Descargar toda la carpeta para escuchar sin conexión'
-                }
-              >
-                <span
-                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                    offlinePlaylists[selectedFolder] ? 'translate-x-5' : 'translate-x-0'
-                  }`}
-                />
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Tab Selector */}
-        <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800 mb-3 shrink-0">
-          <button
-            type="button"
-            onClick={() => setActiveTab('songs')}
-            className={`py-2 px-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-              activeTab === 'songs'
-                ? 'bg-purple-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <Music className="w-3.5 h-3.5" />
-            <span className="truncate">Canciones MP3</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('export')}
-            className={`py-2 px-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-              activeTab === 'export'
-                ? 'bg-purple-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <ListMusic className="w-3.5 h-3.5" />
-            <span className="truncate">Exportar a Celular</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('offline')}
-            className={`py-2 px-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-              activeTab === 'offline'
-                ? 'bg-purple-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <Upload className="w-3.5 h-3.5" />
-            <span className="truncate">Música Offline</span>
-          </button>
-        </div>
-
-        {/* TAB 1: SONG LIST WITH DIRECT 1-TAP MP3 DOWNLOAD */}
-        {activeTab === 'songs' && (
-          <div className="flex-1 flex flex-col min-h-0">
-            {/* Search filter input */}
-            <div className="relative mb-2 shrink-0">
-              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                value={filterSearch}
-                onChange={(e) => setFilterSearch(e.target.value)}
-                placeholder="Buscar canción en esta carpeta..."
-                className="w-full bg-slate-950/80 border border-slate-800 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 transition-colors"
+        {/* Progress Display */}
+        {isProcessing && (
+          <div className="mb-4 p-4 rounded-2xl bg-purple-950/40 border border-purple-500/40 text-center animate-pulse">
+            <p className="text-xs font-semibold text-purple-200 mb-2 truncate">
+              {progress.statusText || 'Procesando canciones...'}
+            </p>
+            <div className="w-full h-3 bg-slate-800 rounded-full overflow-hidden mb-2">
+              <div
+                className="h-full bg-gradient-to-r from-purple-500 to-indigo-500 transition-all duration-200"
+                style={{ width: `${percent}%` }}
               />
             </div>
-
-            {/* Scrollable song cards */}
-            <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 divide-y divide-slate-800/40">
-              {filteredTracks.length === 0 ? (
-                <div className="p-8 text-center text-slate-500 text-xs">
-                  No se encontraron canciones en esta carpeta.
-                </div>
-              ) : (
-                filteredTracks.slice(0, 150).map((t) => (
-                  <div
-                    key={t.id}
-                    className="pt-1.5 first:pt-0 flex items-center justify-between gap-3 p-2 rounded-xl hover:bg-slate-800/50 transition-colors group"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                      <div className="w-9 h-9 rounded-lg overflow-hidden shrink-0 bg-slate-800">
-                        {t.coverUrl ? (
-                          <img src={t.coverUrl} alt={t.title} className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-purple-400 bg-purple-950/40">
-                            <Disc className="w-4 h-4" />
-                          </div>
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-bold text-white truncate">{t.title}</p>
-                        <p className="text-[11px] text-slate-400 truncate">{t.artist}</p>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => handleDownloadSongMP3(t)}
-                      className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-semibold text-xs flex items-center gap-1.5 shrink-0 shadow transition-all"
-                      title="Descargar MP3 Completo"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>Descargar MP3</span>
-                    </button>
-                  </div>
-                ))
-              )}
-              {filteredTracks.length > 150 && (
-                <p className="text-center text-[11px] text-slate-500 py-2">
-                  Mostrando primeras 150 de {filteredTracks.length} canciones. Usa el buscador para encontrar cualquier otra.
-                </p>
-              )}
-            </div>
+            <p className="text-[11px] text-slate-400 font-mono">
+              {progress.current} / {progress.total} canciones ({percent}%)
+            </p>
           </div>
         )}
 
-        {/* TAB 2: EXPORT TO MOBILE PLAYERS (M3U, CSV, JSON, ZIP) */}
-        {activeTab === 'export' && (
-          <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {/* M3U Playlist */}
-              <button
-                type="button"
-                onClick={handleDownloadM3U}
-                className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-800/80 hover:bg-slate-750 border border-slate-700 text-left active:scale-98 transition-all group"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center shrink-0">
-                    <ListMusic className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-white group-hover:text-purple-300">
-                      Playlist Celular (.m3u)
-                    </h4>
-                    <p className="text-[10px] text-slate-400">Para VLC, Poweramp y Reproductores</p>
-                  </div>
-                </div>
-                <Download className="w-4 h-4 text-purple-400 shrink-0" />
-              </button>
-
-              {/* CSV Database */}
-              <button
-                type="button"
-                onClick={handleDownloadCSV}
-                className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-800/80 hover:bg-slate-750 border border-slate-700 text-left active:scale-98 transition-all group"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
-                    <FileSpreadsheet className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-white group-hover:text-emerald-300">
-                      Respaldo CSV (.csv)
-                    </h4>
-                    <p className="text-[10px] text-slate-400">Excel / Deezer catálogo</p>
-                  </div>
-                </div>
-                <Download className="w-4 h-4 text-emerald-400 shrink-0" />
-              </button>
-
-              {/* JSON Database */}
-              <button
-                type="button"
-                onClick={handleDownloadJSON}
-                className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-800/80 hover:bg-slate-750 border border-slate-700 text-left active:scale-98 transition-all group"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
-                    <FileJson className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-white group-hover:text-blue-300">
-                      Respaldo JSON (.json)
-                    </h4>
-                    <p className="text-[10px] text-slate-400">Copia digital completa</p>
-                  </div>
-                </div>
-                <Download className="w-4 h-4 text-blue-400 shrink-0" />
-              </button>
-
-              {/* Mobile ZIP Package */}
-              <button
-                type="button"
-                onClick={handleDownloadZip}
-                disabled={isPackagingZip}
-                className="flex items-center justify-between p-3.5 rounded-2xl bg-indigo-950/40 hover:bg-indigo-950/60 border border-indigo-500/40 text-left active:scale-98 transition-all group"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0">
-                    <FolderArchive className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-white group-hover:text-indigo-300">
-                      Paquete Móvil (.zip)
-                    </h4>
-                    <p className="text-[10px] text-indigo-300">Listas M3U + base de datos</p>
-                  </div>
-                </div>
-                <Download className="w-4 h-4 text-indigo-400 shrink-0" />
-              </button>
-            </div>
-
-            {isPackagingZip && (
-              <div className="p-3 rounded-xl bg-indigo-950/40 border border-indigo-500/40 text-center animate-pulse">
-                <p className="text-xs font-semibold text-indigo-200 mb-1 truncate">{zipProgress.statusText}</p>
-                <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden mb-1">
-                  <div
-                    className="h-full bg-indigo-500 transition-all duration-200"
-                    style={{ width: `${zipPercent}%` }}
-                  />
-                </div>
-                <p className="text-[10px] text-slate-400 font-mono">
-                  {zipProgress.current} / {zipProgress.total} canciones ({zipPercent}%)
-                </p>
-              </div>
-            )}
-
-            {zipFinished && (
-              <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-500/40 flex items-center gap-2.5">
-                <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-                <p className="text-xs text-emerald-200">
-                  ¡Paquete para celular descargado con éxito a tu dispositivo!
-                </p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* TAB 3: OFFLINE IN-APP MUSIC */}
-        {activeTab === 'offline' && (
-          <div className="flex-1 overflow-y-auto space-y-3.5 pr-1">
-            <div className="p-4 rounded-2xl bg-slate-800/80 border border-slate-700">
-              <h4 className="text-xs font-bold text-white mb-1.5 flex items-center gap-2">
-                <Upload className="w-4 h-4 text-emerald-400" />
-                Importar Canciones MP3 de tu Teléfono
-              </h4>
-              <p className="text-xs text-slate-300 leading-relaxed mb-4">
-                Si ya tienes archivos de audio completos (.mp3, .m4a, .wav) en tu celular o memoria microSD, puedes importarlos a la app para escucharlos sin internet y sin gastar tus datos móviles.
+        {/* Finished Success Notice */}
+        {finishedMessage && (
+          <div className="mb-4 p-4 rounded-2xl bg-emerald-950/50 border border-emerald-500/50 flex items-start gap-3">
+            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-xs font-bold text-emerald-200">¡Operación completada con éxito!</p>
+              <p className="text-[11px] text-slate-300 mt-0.5 leading-relaxed">
+                {finishedMessage}
               </p>
+            </div>
+          </div>
+        )}
 
-              {onTriggerImportLocal && (
+        {/* Download Options */}
+        <div className="space-y-3 mb-4">
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              Opciones de Descarga y Offline
+            </h4>
+            <span className="text-[11px] text-purple-400 font-medium">
+              Canciones completas sin límites
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* OPTION 1: FULL SONGS BATCH DOWNLOADER (Windows & Mac/Linux) */}
+            <div className="p-4 rounded-2xl bg-gradient-to-br from-purple-950/50 via-slate-800/80 to-slate-900 border border-purple-500/50 flex flex-col justify-between shadow-lg relative overflow-hidden group">
+              <div className="absolute top-0 right-0 px-2.5 py-0.5 bg-purple-600 text-[10px] font-bold text-white rounded-bl-xl uppercase tracking-wider">
+                Completa 320k
+              </div>
+
+              <div>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <Terminal className="w-4 h-4 text-purple-400" />
+                  <p className="text-xs font-bold text-white">Descargador Completo 1-Click</p>
+                </div>
+                <p className="text-[11px] text-slate-300 leading-relaxed mb-3">
+                  Descarga <strong>todas las canciones completas (3-5 min)</strong> en alta calidad MP3 (320kbps) con carátula y etiquetas dentro de una carpeta llamada <em>"{cleanFolderName}"</em>.
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-1.5 pt-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    onClose();
-                    onTriggerImportLocal();
-                  }}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition-colors shadow-lg shadow-emerald-600/25 active:scale-98"
+                  onClick={handleDownloadFullLengthScripts}
+                  disabled={isProcessing || targetTracks.length === 0}
+                  className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-semibold text-xs transition-colors shadow-md shadow-purple-600/30"
                 >
-                  <Upload className="w-4 h-4" />
-                  <span>Seleccionar Archivos MP3 en tu Celular</span>
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Script Windows (.bat) + M3U</span>
                 </button>
-              )}
+                <button
+                  type="button"
+                  onClick={handleDownloadShScript}
+                  disabled={isProcessing || targetTracks.length === 0}
+                  className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-medium text-[11px] transition-colors"
+                >
+                  <Terminal className="w-3 h-3 text-slate-400" />
+                  <span>Script macOS / Linux (.sh)</span>
+                </button>
+              </div>
+            </div>
+
+            {/* OPTION 2: SAVE TO IN-APP OFFLINE STORAGE (IndexedDB) */}
+            <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-950/40 via-slate-800/80 to-slate-900 border border-emerald-500/40 flex flex-col justify-between shadow-lg">
+              <div>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <HardDrive className="w-4 h-4 text-emerald-400" />
+                  <p className="text-xs font-bold text-white">Guardar en la App para Offline</p>
+                </div>
+                <p className="text-[11px] text-slate-300 leading-relaxed mb-3">
+                  Almacena las canciones directamente en la memoria interna de la aplicación (IndexedDB). Podrás escucharlas en el reproductor <strong>sin consumir datos ni wifi</strong>.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleSaveToAppOffline}
+                disabled={isProcessing || targetTracks.length === 0}
+                className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold text-xs transition-colors shadow-md shadow-emerald-600/30"
+              >
+                <HardDrive className="w-3.5 h-3.5" />
+                <span>Guardar Carpeta Offline ({targetTracks.length})</span>
+              </button>
+            </div>
+
+            {/* OPTION 3: STRUCTURED ZIP ARCHIVE */}
+            <div className="p-4 rounded-2xl bg-slate-800/80 border border-slate-700 flex flex-col justify-between hover:border-slate-600 transition-colors">
+              <div>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <FolderArchive className="w-4 h-4 text-indigo-400" />
+                  <p className="text-xs font-bold text-white">Archivo ZIP con Subcarpeta</p>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed mb-3">
+                  Genera un archivo ZIP estructurado con las pistas de esta carpeta numeradas y su lista de reproducción .M3U lista para abrir en cualquier reproductor.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleDownloadZipByFolder}
+                disabled={isProcessing || targetTracks.length === 0}
+                className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold text-xs transition-colors shadow-md"
+              >
+                <FolderArchive className="w-3.5 h-3.5" />
+                <span>Descargar ZIP ({targetTracks.length})</span>
+              </button>
+            </div>
+
+            {/* OPTION 4: DIRECT DIRECTORY ON PC OR IMPORT LOCAL AUDIO */}
+            <div className="p-4 rounded-2xl bg-slate-800/80 border border-slate-700 flex flex-col justify-between hover:border-slate-600 transition-colors">
+              <div>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <Folder className="w-4 h-4 text-amber-400" />
+                  <p className="text-xs font-bold text-white">Importar o Guardar en Disco</p>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed mb-3">
+                  {onImportLocalAudio
+                    ? '¿Tienes ya archivos MP3 completos en tu computadora o teléfono? Puedes agregarlos directamente a esta carpeta para escucharlos offline.'
+                    : 'Guarda las canciones directamente en una carpeta de tu disco duro con Chrome o Edge.'}
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                {onImportLocalAudio && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onImportLocalAudio();
+                    }}
+                    className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs transition-colors shadow-md"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Cargar Archivos MP3 a esta Carpeta</span>
+                  </button>
+                )}
+
+                {hasFileSystemAccess && (
+                  <button
+                    type="button"
+                    onClick={handleSaveToDirectory}
+                    disabled={isProcessing || targetTracks.length === 0}
+                    className="w-full flex items-center justify-center gap-2 py-1.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors"
+                  >
+                    <Folder className="w-3.5 h-3.5" />
+                    <span>Elegir Carpeta en PC</span>
+                  </button>
+                )}
+              </div>
             </div>
           </div>
-        )}
+        </div>
+
+        {/* Note on Background Playback and Offline */}
+        <div className="p-3.5 rounded-2xl bg-slate-800/40 border border-slate-700/60 flex items-start gap-2.5 text-xs text-slate-300">
+          <HelpCircle className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
+          <p className="text-[11px] text-slate-400 leading-relaxed">
+            <strong className="text-slate-200">Reproducción en segundo plano:</strong> Las canciones guardadas offline utilizan la API nativa de reproducción con soporte de pantalla bloqueada (MediaSession API). Podrás salir de la app, bloquear tu celular o cambiar de pestaña y la música continuará reproduciéndose ininterrumpidamente.
+          </p>
+        </div>
 
         {/* Footer */}
-        <div className="mt-3.5 pt-3 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400 shrink-0">
-          <span className="text-[11px] text-slate-400 truncate">
-            ✓ Audio completo verificado • Cero clips de 30s
-          </span>
+        <div className="pt-4 mt-2 border-t border-slate-800 flex justify-end">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs rounded-xl transition-colors shrink-0"
+            className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs rounded-xl transition-colors"
           >
             Cerrar
           </button>

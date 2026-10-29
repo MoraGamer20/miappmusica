@@ -100,13 +100,13 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-2xl animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/90 backdrop-blur-2xl animate-in fade-in duration-200 overflow-hidden select-none">
       {/* Background ambient glow matching purple/indigo tones */}
       <div className="absolute inset-0 bg-gradient-to-b from-purple-900/20 via-slate-950 to-slate-950 pointer-events-none" />
 
-      <div className="relative w-full max-w-2xl bg-slate-900/90 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl flex flex-col items-center text-white z-10 max-h-[95vh] overflow-y-auto">
+      <div className="relative w-full max-w-lg bg-slate-900/95 border border-slate-800/90 rounded-3xl p-4 sm:p-7 shadow-2xl flex flex-col items-center text-white z-10 max-h-[95dvh] overflow-y-auto overflow-x-hidden scrollbar-none">
         {/* Top Header Bar */}
-        <div className="w-full flex items-center justify-between gap-2 mb-4">
+        <div className="w-full flex items-center justify-between gap-2 mb-2 sm:mb-4">
           <div className="flex items-center gap-1.5 text-xs text-purple-400 font-semibold tracking-wide uppercase shrink-0">
             <Radio className="w-4 h-4 animate-pulse" />
             <span className="hidden sm:inline">Reproduciendo Ahora</span>
@@ -149,20 +149,20 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
           </button>
         </div>
 
-        {/* Vinyl Disc Artwork with Rotation */}
-        <div className="relative my-4 flex items-center justify-center">
+        {/* Vinyl Disc Artwork with Rotation - Responsive & compact */}
+        <div className="relative my-2 sm:my-3 flex items-center justify-center shrink-0">
           <div
-            className={`w-48 h-48 sm:w-64 sm:h-64 rounded-full p-2 bg-gradient-to-tr from-slate-950 via-slate-800 to-slate-900 shadow-2xl border-4 border-slate-700/50 flex items-center justify-center relative overflow-hidden ${
+            className={`w-36 h-36 sm:w-52 sm:h-52 md:w-60 md:h-60 rounded-full p-2 bg-gradient-to-tr from-slate-950 via-slate-800 to-slate-900 shadow-2xl border-4 border-slate-700/50 flex items-center justify-center relative overflow-hidden ${
               isPlaying ? 'animate-[spin_12s_linear_infinite]' : ''
             }`}
           >
             {/* Grooves simulation rings */}
-            <div className="absolute inset-3 rounded-full border border-slate-700/30 pointer-events-none" />
-            <div className="absolute inset-6 rounded-full border border-slate-700/20 pointer-events-none" />
-            <div className="absolute inset-10 rounded-full border border-slate-700/30 pointer-events-none" />
+            <div className="absolute inset-2 sm:inset-3 rounded-full border border-slate-700/30 pointer-events-none" />
+            <div className="absolute inset-4 sm:inset-6 rounded-full border border-slate-700/20 pointer-events-none" />
+            <div className="absolute inset-7 sm:inset-10 rounded-full border border-slate-700/30 pointer-events-none" />
 
             {/* Inner Center Label / Cover Art */}
-            <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-full overflow-hidden shadow-inner border-2 border-slate-600 relative z-10">
+            <div className="w-18 h-18 sm:w-26 sm:h-26 md:w-30 md:h-30 rounded-full overflow-hidden shadow-inner border-2 border-slate-600 relative z-10">
               {track.coverUrl ? (
                 <img
                   src={track.coverUrl}
@@ -171,19 +171,19 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
                 />
               ) : (
                 <div className="w-full h-full bg-gradient-to-tr from-purple-600 via-indigo-600 to-pink-600 flex items-center justify-center text-white">
-                  <Disc className="w-10 h-10" />
+                  <Disc className="w-8 h-8" />
                 </div>
               )}
             </div>
 
             {/* Center spindle hole */}
-            <div className="absolute w-5 h-5 rounded-full bg-slate-950 border-2 border-slate-600 z-20" />
+            <div className="absolute w-4 h-4 rounded-full bg-slate-950 border-2 border-slate-600 z-20" />
           </div>
         </div>
 
         {/* Live Audio Visualizer Spectrum */}
-        <div className="my-3">
-          <AudioVisualizer isPlaying={isPlaying} barCount={36} height={32} color="#c084fc" />
+        <div className="my-2 shrink-0">
+          <AudioVisualizer isPlaying={isPlaying} barCount={32} height={26} color="#c084fc" />
         </div>
 
         {/* Track Title & Artist */}
@@ -196,28 +196,28 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
         </div>
 
         {/* Progress Bar & Seek */}
-        <div className="w-full max-w-md my-4">
+        <div className="w-full max-w-md my-2 sm:my-3 shrink-0">
           <div
             onClick={(e) => {
               const rect = e.currentTarget.getBoundingClientRect();
               const clickX = e.clientX - rect.left;
               onSeek(Math.max(0, Math.min(1, clickX / rect.width)) * duration);
             }}
-            className="w-full h-2 bg-slate-800 hover:h-3 rounded-full overflow-hidden cursor-pointer transition-all"
+            className="w-full h-2 bg-slate-800 hover:h-2.5 rounded-full overflow-hidden cursor-pointer transition-all"
           >
             <div
               className="h-full bg-gradient-to-r from-purple-500 to-indigo-500 transition-all duration-100"
               style={{ width: `${progressPercent}%` }}
             />
           </div>
-          <div className="flex justify-between text-xs text-slate-400 font-mono mt-1.5">
+          <div className="flex justify-between text-xs text-slate-400 font-mono mt-1">
             <span>{formatTime(currentTime)}</span>
             <span>{formatTime(duration)}</span>
           </div>
         </div>
 
         {/* Main Controls */}
-        <div className="flex items-center justify-center gap-6 my-2">
+        <div className="flex items-center justify-center gap-5 sm:gap-6 my-1.5 sm:my-2 shrink-0">
           {/* Shuffle */}
           <button
             type="button"
