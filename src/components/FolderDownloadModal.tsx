@@ -16,6 +16,7 @@ import {
   Smartphone,
   ListMusic,
   Headphones,
+  Server,
 } from 'lucide-react';
 import { Track } from '../types/music';
 import {
@@ -38,6 +39,7 @@ interface FolderDownloadModalProps {
   onImportLocalAudio?: () => void;
   onRefreshOffline?: () => void;
   onClearOfflineCache?: () => void;
+  onOpenMusicGrabber?: (tracks: Track[], folderName: string) => void;
 }
 
 export const FolderDownloadModal: React.FC<FolderDownloadModalProps> = ({
@@ -50,6 +52,7 @@ export const FolderDownloadModal: React.FC<FolderDownloadModalProps> = ({
   onImportLocalAudio,
   onRefreshOffline,
   onClearOfflineCache,
+  onOpenMusicGrabber,
 }) => {
   const [selectedFolder, setSelectedFolder] = useState<string>(initialFolder);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -277,6 +280,36 @@ export const FolderDownloadModal: React.FC<FolderDownloadModalProps> = ({
             >
               <Headphones className="w-4 h-4" />
               <span>Activar Modo Offline para "{cleanFolderName}" ({targetTracks.length})</span>
+            </button>
+          </div>
+
+          {/* OPTION: MUSICGRABBER LOCAL (320 KBPS FULL) */}
+          <div className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-950/70 via-slate-800/90 to-slate-900 border border-emerald-500/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <Server className="w-4 h-4 text-emerald-400 shrink-0" />
+                <p className="text-xs font-bold text-white truncate">
+                  Descargar por Bloques con MusicGrabber Local
+                </p>
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">
+                  320 kbps FULL
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                Descarga canciones completas sin límites ni bloqueos mediante tu servidor Python en PC (192.168.1.45:5000).
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                onOpenMusicGrabber?.(targetTracks, cleanFolderName);
+              }}
+              className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs transition-all shadow-md shadow-emerald-600/25 shrink-0 flex items-center justify-center gap-1.5"
+            >
+              <Server className="w-3.5 h-3.5" />
+              <span>Abrir MusicGrabber ({targetTracks.length})</span>
             </button>
           </div>
 

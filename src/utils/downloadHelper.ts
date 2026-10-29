@@ -57,7 +57,7 @@ export function downloadTracksAsJSON(tracks: Track[], filename = 'Biblioteca_Can
 export async function downloadTrackAudio(track: Track): Promise<boolean> {
   try {
     let blob = await getOfflineAudioBlob(track.id);
-    if (!blob || blob.size < 600000) {
+    if (!blob) {
       blob = await fetchOrGenerateTrackAudioBlob(track);
       if (blob) {
         await saveOfflineAudio(track, blob);
@@ -143,6 +143,13 @@ export async function downloadTracksByFolderZip(
   // Add overall CSV
   zip.file('Biblioteca_Completa.csv', exportToCSV(tracks));
 
+  // Add list formatted for the user's MusicGrabber 320kbps app
+  const musicGrabberList = tracks
+    .map((t) => `${(t.artist || 'Artista').trim()} - ${(t.title || 'Cancion').trim()}`)
+    .filter(Boolean)
+    .join('\n');
+  zip.file('Lista_Para_MusicGrabber_320kbps.txt', musicGrabberList);
+
   let processed = 0;
 
   for (const [folderName, folderTracks] of Object.entries(grouped)) {
@@ -157,7 +164,7 @@ export async function downloadTracksByFolderZip(
 
       try {
         let blob = await getOfflineAudioBlob(track.id);
-        if (!blob || blob.size < 600000) {
+        if (!blob) {
           blob = await fetchOrGenerateTrackAudioBlob(track);
           if (blob) {
             await saveOfflineAudio(track, blob);

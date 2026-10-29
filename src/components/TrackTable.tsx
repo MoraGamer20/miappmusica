@@ -30,6 +30,7 @@ import {
   CheckCircle2,
   Loader2,
   ArrowDownCircle,
+  Server,
 } from 'lucide-react';
 import { Track, SortField, SortOrder } from '../types/music';
 import { getStreamingLinks } from '../utils/downloadHelper';
@@ -69,6 +70,7 @@ interface TrackTableProps {
   onOpenFolderDownloadModal?: (folderName?: string) => void;
   onImportLocalAudio?: () => void;
   onCancelOfflineSync?: () => void;
+  onOpenMusicGrabber?: () => void;
 }
 
 export const TrackTable: React.FC<TrackTableProps> = ({
@@ -99,6 +101,7 @@ export const TrackTable: React.FC<TrackTableProps> = ({
   onDirectDownloadTrack,
   onOpenFolderDownloadModal,
   onImportLocalAudio,
+  onOpenMusicGrabber,
 }) => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
@@ -350,6 +353,19 @@ export const TrackTable: React.FC<TrackTableProps> = ({
                   </span>
                 </div>
               </div>
+            )}
+
+            {tracks.length > 0 && onOpenMusicGrabber && (
+              <button
+                type="button"
+                onClick={onOpenMusicGrabber}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-xs text-emerald-300 hover:text-white bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-500/50 transition-colors shadow-sm active:scale-95"
+                title="Descargar canciones completas en bloque con MusicGrabber Local (320 kbps)"
+              >
+                <Server className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="hidden sm:inline">MusicGrabber 320k</span>
+                <span className="sm:hidden">320k</span>
+              </button>
             )}
 
             {tracks.length > 0 && onOpenFolderDownloadModal && (

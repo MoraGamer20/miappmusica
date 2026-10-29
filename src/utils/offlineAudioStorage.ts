@@ -300,159 +300,14 @@ export function audioBufferToWavBlob(buffer: AudioBuffer): Blob {
 }
 
 /**
- * Procedurally synthesizes a full playable audio track using OfflineAudioContext.
- * Guarantees that every song has 100% full duration (3-5 minutes, matching track.duration)
- * with complete intro, verses, chorus, bridge and outro in any player (mobile, VLC, Windows, Mac).
+ * Retrieves the genuine audio Blob for a track:
+ * 1. Returns local user-uploaded or cached full MP3 if available.
+ * 2. Fetches the artist's real audio stream from Deezer.
+ * NEVER synthesizes artificial tones, bleeps, or Minecraft-like chimes.
  */
-export async function synthesizeTrackAudioBlob(
-  title: string,
-  artist: string,
-  durationSec = 210
-): Promise<Blob> {
-  const sampleRate = 22050; // Optimized sample rate: fast rendering (~120ms) and crisp audio
-  const synthDuration = Math.max(160, durationSec || 210);
-  const totalSamples = Math.floor(sampleRate * synthDuration);
-
-  // Musical hash to determine BPM and key scale
-  const hash = (title + ' ' + artist).split('').reduce((acc, char, i) => acc + char.charCodeAt(0) * (i + 1), 0);
-  const bpms = [108, 114, 120, 124, 128];
-  const bpm = bpms[Math.abs(hash) % bpms.length];
-  const beatSec = 60 / bpm; // Duration of one beat (~0.47s to 0.55s)
-  const barSec = beatSec * 4; // 4/4 time signature (~1.9s to 2.2s per bar)
-
-  // Musical scales (Chords and melodies in Hz)
-  const scales = [
-    // C Major / A Minor
-    [261.63, 293.66, 329.63, 392.00, 440.00, 523.25],
-    // G Major / E Minor
-    [196.00, 220.00, 246.94, 293.66, 329.63, 392.00],
-    // D Major / B Minor
-    [293.66, 329.63, 369.99, 440.00, 493.88, 587.33],
-    // F Major / D Minor
-    [174.61, 196.00, 220.00, 261.63, 293.66, 349.23],
-    // A Major / F# Minor
-    [220.00, 246.94, 277.18, 329.63, 369.99, 440.00],
-  ];
-  const scale = scales[Math.abs(hash) % scales.length];
-
-  const OfflineCtxClass =
-    window.OfflineAudioContext ||
-    (window as unknown as { webkitOfflineAudioContext: typeof OfflineAudioContext }).webkitOfflineAudioContext;
-
-  const offlineCtx = new OfflineCtxClass(2, totalSamples, sampleRate);
-  const masterGain = offlineCtx.createGain();
-  masterGain.gain.setValueAtTime(0.4, 0);
-  // Smooth fade-out at the very end
-  masterGain.gain.setValueAtTime(0.4, Math.max(0, synthDuration - 4));
-  masterGain.gain.exponentialRampToValueAtTime(0.0001, synthDuration);
-  masterGain.connect(offlineCtx.destination);
-
-  const totalBars = Math.floor(synthDuration / barSec);
-
-  // Generate complete song across all bars from 0s to end
-  for (let bar = 0; bar < totalBars; bar++) {
-    const barStart = bar * barSec;
-    if (barStart >= synthDuration - 2) break;
-
-    // Section classification: Intro (first 4 bars), Outro (last 4 bars), Chorus vs Verse
-    const isIntro = bar < 4;
-    const isOutro = bar >= totalBars - 4;
-    const isChorus = !isIntro && !isOutro && (bar % 16 >= 8 && bar % 16 <= 15);
-    const chordIndex = (bar + hash) % scale.length;
-    const rootFreq = scale[chordIndex];
-
-    // 1. Bassline (Punchy sub-bass on 1st & 3rd beat)
-    if (!isIntro || bar >= 2) {
-      const bassBeats = [0, 2];
-      for (const b of bassBeats) {
-        const bassTime = barStart + b * beatSec;
-        if (bassTime + beatSec > synthDuration) continue;
-
-        const osc = offlineCtx.createOscillator();
-        const gain = offlineCtx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(rootFreq * 0.5, bassTime);
-
-        gain.gain.setValueAtTime(0.001, bassTime);
-        gain.gain.exponentialRampToValueAtTime(isChorus ? 0.35 : 0.25, bassTime + 0.04);
-        gain.gain.exponentialRampToValueAtTime(0.001, bassTime + beatSec * 1.8);
-
-        osc.connect(gain);
-        gain.connect(masterGain);
-        osc.start(bassTime);
-        osc.stop(bassTime + beatSec * 1.8);
-      }
-    }
-
-    // 2. Harmonic Pad / Chords (Smooth sustaining pad for atmospheric depth)
-    const padOsc1 = offlineCtx.createOscillator();
-    const padOsc2 = offlineCtx.createOscillator();
-    const padGain = offlineCtx.createGain();
-
-    padOsc1.type = 'triangle';
-    padOsc2.type = 'sine';
-    padOsc1.frequency.setValueAtTime(rootFreq, barStart);
-    padOsc2.frequency.setValueAtTime(scale[(chordIndex + 2) % scale.length], barStart);
-
-    const padVolume = isIntro ? 0.12 : isChorus ? 0.22 : 0.15;
-    padGain.gain.setValueAtTime(0.001, barStart);
-    padGain.gain.exponentialRampToValueAtTime(padVolume, barStart + 0.3);
-    padGain.gain.setValueAtTime(padVolume, barStart + barSec - 0.2);
-    padGain.gain.exponentialRampToValueAtTime(0.001, barStart + barSec);
-
-    padOsc1.connect(padGain);
-    padOsc2.connect(padGain);
-    padGain.connect(masterGain);
-
-    padOsc1.start(barStart);
-    padOsc1.stop(barStart + barSec);
-    padOsc2.start(barStart);
-    padOsc2.stop(barStart + barSec);
-
-    // 3. Melodic lead notes (Arpeggiated notes across the 4 beats)
-    if (!isIntro || bar >= 3) {
-      const noteSteps = isChorus ? 4 : 2;
-      const stepDuration = barSec / noteSteps;
-
-      for (let s = 0; s < noteSteps; s++) {
-        const noteTime = barStart + s * stepDuration;
-        if (noteTime + stepDuration > synthDuration) continue;
-
-        const noteIndex = (hash + bar * 2 + s) % scale.length;
-        const noteFreq = scale[noteIndex] * (isChorus ? 2 : 1);
-
-        const melOsc = offlineCtx.createOscillator();
-        const melGain = offlineCtx.createGain();
-        melOsc.type = isChorus ? 'sawtooth' : 'triangle';
-        melOsc.frequency.setValueAtTime(noteFreq, noteTime);
-
-        const melVol = isChorus ? 0.18 : 0.12;
-        melGain.gain.setValueAtTime(0.001, noteTime);
-        melGain.gain.exponentialRampToValueAtTime(melVol, noteTime + 0.03);
-        melGain.gain.exponentialRampToValueAtTime(0.0001, noteTime + stepDuration - 0.02);
-
-        melOsc.connect(melGain);
-        melGain.connect(masterGain);
-        melOsc.start(noteTime);
-        melOsc.stop(noteTime + stepDuration);
-      }
-    }
-  }
-
-  const renderedBuffer = await offlineCtx.startRendering();
-  return audioBufferToWavBlob(renderedBuffer);
-}
-
-/**
- * Ensures a 100% full song duration Blob for a track.
- * NEVER downloads or saves Deezer's 30-second preview clips.
- * Replaces any legacy 30s clips with the full complete song (3-5 minutes).
- */
-export async function fetchOrGenerateTrackAudioBlob(track: Track): Promise<Blob> {
+export async function fetchOrGenerateTrackAudioBlob(track: Track): Promise<Blob | null> {
   const cached = await getOfflineAudioBlob(track.id);
-
-  // If already cached and is full duration (size > 600KB, ignoring old 30s snippets):
-  if (cached && cached.size > 600000) {
+  if (cached) {
     return cached;
   }
 
@@ -461,17 +316,27 @@ export async function fetchOrGenerateTrackAudioBlob(track: Track): Promise<Blob>
     return cached;
   }
 
-  // CRITICAL: NEVER fetch track.previewUrl from Deezer CDN (it is only a 30s snippet).
-  // Synthesize the genuine full song duration matching track.duration (180s - 260s)
-  const fullDuration = Math.max(160, track.duration || 210);
-  const fullSongBlob = await synthesizeTrackAudioBlob(track.title, track.artist, fullDuration);
+  let previewUrl = track.previewUrl;
+  if (!previewUrl) {
+    try {
+      const details = await getTrackDetails(track);
+      if (details.previewUrl) previewUrl = details.previewUrl;
+    } catch {}
+  }
 
-  // Persist full song into IndexedDB so in-app offline player and ZIP exports have complete audio
-  try {
-    await saveOfflineAudio(track, fullSongBlob);
-  } catch {}
+  if (previewUrl) {
+    try {
+      const res = await fetch(previewUrl);
+      if (res.ok) {
+        const blob = await res.blob();
+        if (blob && blob.size > 1000) {
+          return blob;
+        }
+      }
+    } catch {}
+  }
 
-  return fullSongBlob;
+  return null;
 }
 
 /**

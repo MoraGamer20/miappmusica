@@ -24,6 +24,7 @@ import { YouTubeAudioEmbed } from './components/YouTubeAudioEmbed';
 import { FullTrackDownloadModal } from './components/FullTrackDownloadModal';
 import { BulkLibraryDownloadModal } from './components/BulkLibraryDownloadModal';
 import { FolderDownloadModal } from './components/FolderDownloadModal';
+import { MusicGrabberModal } from './components/MusicGrabberModal';
 import { SongDiscoveryModal } from './components/SongDiscoveryModal';
 import { VercelDeployModal } from './components/VercelDeployModal';
 import { LyricsModal } from './components/LyricsModal';
@@ -48,7 +49,7 @@ import {
 } from './utils/offlineAudioStorage';
 import { downloadTrackAudio, triggerFileDownload } from './utils/downloadHelper';
 import defaultCsvRaw from '../public/assets/aistudio/My_Deezer_Library_e6092c00.csv?raw';
-import { Heart, Play, Shuffle, Sliders, Download, Sparkles, ListMusic, Users, Clock, RotateCcw, X, Music, HardDrive, FolderDown, Upload, Disc, Loader2 } from 'lucide-react';
+import { Heart, Play, Shuffle, Sliders, Download, Sparkles, ListMusic, Users, Clock, RotateCcw, X, Music, HardDrive, FolderDown, Upload, Disc, Loader2, Server } from 'lucide-react';
 
 const STORAGE_KEY = 'deezer_library_tracks_v4_authentic';
 const CUSTOM_PLAYLISTS_KEY = 'deezer_custom_playlists_v2';
@@ -155,6 +156,23 @@ export default function App() {
   const [editingTrack, setEditingTrack] = useState<Track | null>(null);
   const [downloadModalTrack, setDownloadModalTrack] = useState<Track | null>(null);
   const [isBulkDownloadOpen, setIsBulkDownloadOpen] = useState(false);
+  const [musicGrabberState, setMusicGrabberState] = useState<{
+    isOpen: boolean;
+    tracks: Track[];
+    folderName: string;
+  }>({
+    isOpen: false,
+    tracks: [],
+    folderName: '',
+  });
+
+  const handleOpenMusicGrabber = useCallback((targetTracks: Track[], name = 'Selección') => {
+    setMusicGrabberState({
+      isOpen: true,
+      tracks: targetTracks,
+      folderName: name,
+    });
+  }, []);
   const [isVercelModalOpen, setIsVercelModalOpen] = useState(false);
   const [isLyricsOpen, setIsLyricsOpen] = useState(false);
   const [isEqualizerOpen, setIsEqualizerOpen] = useState(false);
@@ -1448,6 +1466,16 @@ export default function App() {
                 onDirectDownloadTrack={handleDirectDownloadTrack}
                 onOpenFolderDownloadModal={(folder) => handleOpenFolderDownload(folder || activePlaylist)}
                 onImportLocalAudio={() => localAudioInputRef.current?.click()}
+                onOpenMusicGrabber={() =>
+                  handleOpenMusicGrabber(
+                    filteredTracks,
+                    activePlaylist === 'ALL'
+                      ? 'Toda la Biblioteca'
+                      : isFavoritesPlaylist(activePlaylist)
+                      ? 'Favoritas'
+                      : activePlaylist
+                  )
+                }
               />
             </div>
           )}
@@ -1521,6 +1549,12 @@ export default function App() {
                 onDirectDownloadTrack={handleDirectDownloadTrack}
                 onOpenFolderDownloadModal={(folder) => handleOpenFolderDownload(folder || 'Favorite Tracks')}
                 onImportLocalAudio={() => localAudioInputRef.current?.click()}
+                onOpenMusicGrabber={() =>
+                  handleOpenMusicGrabber(
+                    tracks.filter((t) => t.isFavorite),
+                    'Favoritas'
+                  )
+                }
               />
             </div>
           )}
@@ -1547,6 +1581,16 @@ export default function App() {
               sleepTimerRemaining={sleepTimerSecondsRemaining}
               onClearOfflineCache={handleClearOfflineCache}
               offlineCount={tracks.filter((t) => offlineTrackIds.has(t.id) || t.isOfflineAvailable).length}
+              onOpenMusicGrabber={() =>
+                handleOpenMusicGrabber(
+                  filteredTracks,
+                  activePlaylist === 'ALL'
+                    ? 'Toda la Biblioteca'
+                    : isFavoritesPlaylist(activePlaylist)
+                    ? 'Favoritas'
+                    : activePlaylist
+                )
+              }
             />
           )}
         </div>
@@ -1586,6 +1630,16 @@ export default function App() {
             onDirectDownloadTrack={handleDirectDownloadTrack}
             onOpenFolderDownloadModal={(folder) => handleOpenFolderDownload(folder || activePlaylist)}
             onImportLocalAudio={() => localAudioInputRef.current?.click()}
+            onOpenMusicGrabber={() =>
+              handleOpenMusicGrabber(
+                filteredTracks,
+                activePlaylist === 'ALL'
+                  ? 'Toda la Biblioteca'
+                  : isFavoritesPlaylist(activePlaylist)
+                  ? 'Favoritas'
+                  : activePlaylist
+              )
+            }
           />
         </div>
       </div>
@@ -1759,6 +1813,18 @@ export default function App() {
           setOfflineTrackIds(ids);
         }}
         onClearOfflineCache={handleClearOfflineCache}
+        onOpenMusicGrabber={(tracksToDownload, name) =>
+          handleOpenMusicGrabber(tracksToDownload, name)
+        }
+      />
+
+      {/* MusicGrabber Local (320 kbps FULL) Bridge Modal */}
+      <MusicGrabberModal
+        isOpen={musicGrabberState.isOpen}
+        onClose={() => setMusicGrabberState((prev) => ({ ...prev, isOpen: false }))}
+        tracks={musicGrabberState.tracks}
+        folderName={musicGrabberState.folderName}
+        onImportLocalAudio={() => localAudioInputRef.current?.click()}
       />
 
       {/* Song Discovery & Web Add Modal */}

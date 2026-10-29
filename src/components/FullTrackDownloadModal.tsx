@@ -13,11 +13,13 @@ import {
   ExternalLink,
   Upload,
   Music,
+  Server,
 } from 'lucide-react';
 import { Track } from '../types/music';
 import { saveOfflineAudio, isTrackOffline, getOfflineAudioBlob } from '../utils/offlineAudioStorage';
 import { getFullTrackVideoId, getFullDownloadLinks } from '../utils/fullAudioService';
 import { triggerFileDownload, downloadTrackAudio } from '../utils/downloadHelper';
+import { copyTracksForMusicGrabber } from '../utils/musicGrabberBridge';
 
 interface FullTrackDownloadModalProps {
   isOpen: boolean;
@@ -226,6 +228,30 @@ export const FullTrackDownloadModal: React.FC<FullTrackDownloadModalProps> = ({
                 <p className="text-xs font-semibold text-white">Vincular mi archivo MP3 completo</p>
                 <p className="text-[10px] text-slate-400">
                   Guárdalo en la app para escuchar completo sin conexión
+                </p>
+              </div>
+            </div>
+          </button>
+
+          {/* Option 5: Copy for MusicGrabber Local (320 kbps) */}
+          <button
+            type="button"
+            onClick={async () => {
+              const ok = await copyTracksForMusicGrabber([track]);
+              if (ok) {
+                setStatusMessage('¡Pista copiada para MusicGrabber! Pégala en tu app de PC (192.168.1.45:5000)');
+              }
+            }}
+            className="w-full flex items-center justify-between p-3 rounded-2xl bg-emerald-950/40 hover:bg-emerald-900/50 border border-emerald-500/40 text-emerald-300 text-xs transition-all active:scale-98"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                <Server className="w-4 h-4" />
+              </div>
+              <div className="text-left">
+                <p className="text-xs font-bold text-white">Copiar para MusicGrabber Local (320 kbps)</p>
+                <p className="text-[10px] text-emerald-300">
+                  Formato listo para pegar en tu servidor local
                 </p>
               </div>
             </div>

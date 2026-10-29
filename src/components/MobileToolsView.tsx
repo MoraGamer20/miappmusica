@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   FolderDown,
   Trash2,
+  Server,
 } from 'lucide-react';
 import { PWAInstallButton } from './PWAInstallButton';
 
@@ -39,6 +40,7 @@ interface MobileToolsViewProps {
   sleepTimerRemaining: number | null;
   onClearOfflineCache?: () => void;
   offlineCount?: number;
+  onOpenMusicGrabber?: () => void;
 }
 
 export const MobileToolsView: React.FC<MobileToolsViewProps> = ({
@@ -62,6 +64,7 @@ export const MobileToolsView: React.FC<MobileToolsViewProps> = ({
   sleepTimerRemaining,
   onClearOfflineCache,
   offlineCount = 0,
+  onOpenMusicGrabber,
 }) => {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -205,6 +208,31 @@ export const MobileToolsView: React.FC<MobileToolsViewProps> = ({
           Exportar y Respaldar
         </h3>
         <div className="grid grid-cols-2 gap-2.5">
+          {/* MusicGrabber Local 320kbps Button */}
+          {onOpenMusicGrabber && (
+            <button
+              type="button"
+              onClick={onOpenMusicGrabber}
+              className="col-span-2 flex items-center justify-between p-3.5 rounded-2xl bg-gradient-to-r from-emerald-950/80 via-slate-900 to-slate-900 border border-emerald-500/50 active:scale-98 transition-all text-left shadow-lg"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
+                  <Server className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-sm font-bold text-white">MusicGrabber Local</h4>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">
+                      320 kbps FULL
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300">Descarga a bloques sin límites conectando tu app de PC</p>
+                </div>
+              </div>
+              <ChevronRight className="w-4 h-4 text-emerald-400" />
+            </button>
+          )}
+
           {/* Download by Folder for Mobile */}
           {onOpenFolderDownload && (
             <button
