@@ -47,6 +47,7 @@ interface MusicPlayerProps {
   playbackSource: 'full' | 'preview';
   onTogglePlaybackSource: () => void;
   onOpenDownloadModal: (track: Track) => void;
+  onDirectDownloadTrack?: (track: Track) => void;
   onOpenLyrics?: () => void;
   onOpenEqualizer?: () => void;
   onOpenSleepTimer?: () => void;
@@ -77,6 +78,7 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({
   playbackSource,
   onTogglePlaybackSource,
   onOpenDownloadModal,
+  onDirectDownloadTrack,
   onOpenLyrics,
   onOpenEqualizer,
   onOpenSleepTimer,
@@ -103,7 +105,11 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
   const handleDownload = () => {
     if (!currentTrack) return;
-    onOpenDownloadModal(currentTrack);
+    if (onDirectDownloadTrack) {
+      onDirectDownloadTrack(currentTrack);
+    } else {
+      onOpenDownloadModal(currentTrack);
+    }
   };
 
   if (!currentTrack) {
@@ -390,32 +396,9 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({
               </div>
               <span>{formatTime(duration)}</span>
 
-              {/* Full Audio vs 30s Preview Mode Toggle */}
-              <div className="flex items-center bg-slate-800 p-0.5 rounded-lg border border-slate-700/80 text-[10px] ml-1">
-                <button
-                  type="button"
-                  onClick={() => playbackSource !== 'full' && onTogglePlaybackSource()}
-                  className={`px-2 py-0.5 rounded-md font-semibold transition-colors ${
-                    playbackSource === 'full'
-                      ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                  title="Modo Canción Completa (reproduce la canción completa de 3-5 minutos)"
-                >
-                  🎵 Completa
-                </button>
-                <button
-                  type="button"
-                  onClick={() => playbackSource !== 'preview' && onTogglePlaybackSource()}
-                  className={`px-2 py-0.5 rounded-md font-medium transition-colors ${
-                    playbackSource === 'preview'
-                      ? 'bg-purple-600 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                  title="Escuchar vista previa rápida de la canción"
-                >
-                  ⚡ Preview
-                </button>
+              {/* Pure High Fidelity Audio Badge */}
+              <div className="flex items-center bg-slate-800/80 px-2 py-0.5 rounded-lg border border-purple-500/30 text-[10px] ml-1 text-purple-300 font-semibold shadow-sm">
+                🎵 Canción Completa
               </div>
             </div>
           </div>

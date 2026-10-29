@@ -8,23 +8,23 @@ import {
   CheckCircle2,
   HelpCircle,
   Folder,
-  Terminal,
   Heart,
   Upload,
   Sparkles,
   Music,
-  Check,
-  Copy,
+  Trash2,
+  Smartphone,
+  ListMusic,
+  Headphones,
 } from 'lucide-react';
 import { Track } from '../types/music';
 import {
   downloadTracksByFolderZip,
-  downloadToLocalDirectoryPicker,
   downloadTracksAsM3U,
-  downloadTextFile,
+  downloadTracksAsCSV,
+  downloadTracksAsJSON,
   cacheTracksForOffline,
 } from '../utils/downloadHelper';
-import { generateBulkDownloadScripts } from '../utils/fullAudioService';
 import { isFavoritesPlaylist } from '../App';
 
 interface FolderDownloadModalProps {
@@ -33,8 +33,10 @@ interface FolderDownloadModalProps {
   tracks: Track[];
   availablePlaylists: string[];
   initialFolder?: string;
+  offlineTrackIds?: Set<string>;
   onImportLocalAudio?: () => void;
   onRefreshOffline?: () => void;
+  onClearOfflineCache?: () => void;
 }
 
 export const FolderDownloadModal: React.FC<FolderDownloadModalProps> = ({
@@ -43,8 +45,10 @@ export const FolderDownloadModal: React.FC<FolderDownloadModalProps> = ({
   tracks,
   availablePlaylists,
   initialFolder = 'ALL',
+  offlineTrackIds,
   onImportLocalAudio,
   onRefreshOffline,
+  onClearOfflineCache,
 }) => {
   const [selectedFolder, setSelectedFolder] = useState<string>(initialFolder);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -54,7 +58,6 @@ export const FolderDownloadModal: React.FC<FolderDownloadModalProps> = ({
     statusText: '',
   });
   const [finishedMessage, setFinishedMessage] = useState<string | null>(null);
-  const [hasCopiedScript, setHasCopiedScript] = useState(false);
 
   // Sync with initialFolder when opened
   useEffect(() => {
@@ -68,7 +71,6 @@ export const FolderDownloadModal: React.FC<FolderDownloadModalProps> = ({
   if (!isOpen) return null;
 
   // Filter target tracks for the chosen folder
-  // If Favoritas / Corazón is selected, capture ALL songs where isFavorite is true
   const isFav = isFavoritesPlaylist(selectedFolder);
   const targetTracks: Track[] =
     selectedFolder === 'ALL'
@@ -85,39 +87,11 @@ export const FolderDownloadModal: React.FC<FolderDownloadModalProps> = ({
     ? 'Biblioteca_Completa'
     : selectedFolder.replace(/[/\\?%*:|"<>]/g, '_');
 
-  // Method 1: Generate Full-Length Audio Batch Downloader Scripts (320kbps MP3s without 30s cut)
-  const handleDownloadFullLengthScripts = () => {
-    const scripts = generateBulkDownloadScripts(targetTracks, `Carpeta_${cleanFolderName}`);
-    
-    // Download Windows .bat
-    downloadTextFile(
-      scripts.batScript,
-      `Descargar_${cleanFolderName}_Completas.bat`,
-      'application/x-bat;charset=utf-8'
-    );
+  const localTracksCount = targetTracks.filter(
+    (t) => offlineTrackIds?.has(t.id) || t.isOfflineAvailable || t.type === 'Local'
+  ).length;
 
-    // Also download M3U playlist file for convenient playback
-    downloadTracksAsM3U(targetTracks, cleanFolderName);
-
-    setFinishedMessage(
-      `¡Script de descarga completa generado para "${cleanFolderName}" (${targetTracks.length} canciones)! Ejecútalo en tu PC para descargar todas las canciones completas a 320kbps sin recorte de 30 segundos.`
-    );
-  };
-
-  // Method 1b: Mac/Linux Shell Script
-  const handleDownloadShScript = () => {
-    const scripts = generateBulkDownloadScripts(targetTracks, `Carpeta_${cleanFolderName}`);
-    downloadTextFile(
-      scripts.shScript,
-      `Descargar_${cleanFolderName}_Completas.sh`,
-      'application/x-sh;charset=utf-8'
-    );
-    setFinishedMessage(
-      `¡Script bash para macOS/Linux generado! Dale permisos con 'chmod +x' y ejecútalo para descargar todas las canciones completas.`
-    );
-  };
-
-  // Method 2: Cache entire folder into browser IndexedDB for offline in-app playback
+  // Option 1: Save folder directly to phone in-app offline storage (Deezer Mobile Offline Mode)
   const handleSaveToAppOffline = async () => {
     setIsProcessing(true);
     setFinishedMessage(null);
@@ -129,66 +103,72 @@ export const FolderDownloadModal: React.FC<FolderDownloadModalProps> = ({
     setIsProcessing(false);
     onRefreshOffline?.();
     setFinishedMessage(
-      `¡Se guardaron ${result.successCount} canciones de "${cleanFolderName}" en la memoria offline de la app! Ya puedes escucharlas sin internet en la sección "Descargadas / Offline".`
+      `¡Modo Offline activado para "${cleanFolderName}" (${targetTracks.length} canciones)! Ya puedes escucharlas en tu celular sin internet.`
     );
   };
 
-  // Method 3: Download structured ZIP with subfolders per playlist
+  // Option 2: Download Mobile M3U Playlist file
+  const handleDownloadM3U = () => {
+    downloadTracksAsM3U(targetTracks, cleanFolderName);
+    setFinishedMessage(
+      `¡Lista de reproducción .M3U descargada! Ábrela en tu reproductor móvil (VLC para Android/iOS, Poweramp o Musicolet).`
+    );
+  };
+
+  // Option 3: Download Mobile ZIP package with organized subfolder
   const handleDownloadZipByFolder = async () => {
     setIsProcessing(true);
     setFinishedMessage(null);
 
     const safeName =
       selectedFolder === 'ALL'
-        ? 'Biblioteca_Deezer_Por_Carpetas.zip'
-        : `Carpeta_${cleanFolderName}.zip`;
+        ? 'Biblioteca_Deezer_Movil.zip'
+        : `Carpeta_${cleanFolderName}_Movil.zip`;
 
-    await downloadTracksByFolderZip(targetTracks, safeName, (current, total, statusText) => {
+    const result = await downloadTracksByFolderZip(targetTracks, safeName, (current, total, statusText) => {
       setProgress({ current, total, statusText });
     });
 
     setIsProcessing(false);
-    setFinishedMessage(
-      `¡Archivo ZIP descargado con éxito con la estructura de subcarpetas y lista .M3U!`
-    );
-  };
-
-  // Method 4: Save directly into a chosen folder on PC (Chrome, Edge, Opera)
-  const handleSaveToDirectory = async () => {
-    setIsProcessing(true);
-    setFinishedMessage(null);
-
-    const result = await downloadToLocalDirectoryPicker(targetTracks, (current, total, statusText) => {
-      setProgress({ current, total, statusText });
-    });
-
-    setIsProcessing(false);
-    if (result) {
+    if (result.successCount > 0) {
       setFinishedMessage(
-        `¡Se guardaron ${result.successCount} canciones directamente en la carpeta elegida de tu disco duro!`
+        `¡Archivo ZIP descargado con ${result.successCount} canciones completas .MP3 y lista de reproducción .M3U!`
+      );
+    } else {
+      setFinishedMessage(
+        `¡Archivo ZIP descargado con la lista de reproducción móvil .M3U y metadatos! Para incluir los archivos de audio .MP3 dentro del ZIP, usa "Cargar Audios" o guárdalas en la memoria local.`
       );
     }
   };
 
+  // Option 4: Download CSV spreadsheet
+  const handleDownloadCSV = () => {
+    downloadTracksAsCSV(targetTracks, `${cleanFolderName}.csv`);
+    setFinishedMessage(`Archivo CSV de respaldo exportado con éxito.`);
+  };
+
   const percent = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
-  const hasFileSystemAccess = typeof window !== 'undefined' && 'showDirectoryPicker' in window;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-150">
-      <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-7 shadow-2xl text-slate-100 flex flex-col max-h-[92vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3.5 sm:p-5 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-150">
+      <div className="relative w-full max-w-xl bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-2xl text-slate-100 flex flex-col max-h-[92vh] overflow-y-auto scrollbar-none">
         {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+        <div className="flex items-center justify-between pb-3.5 border-b border-slate-800">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-purple-600 via-indigo-600 to-rose-500 flex items-center justify-center text-white shadow-lg shadow-purple-500/20">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-purple-600 via-indigo-600 to-rose-500 flex items-center justify-center text-white shadow-lg shadow-purple-500/20 shrink-0">
               <FolderDown className="w-5 h-5" />
             </div>
             <div>
               <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <span>Descargar Carpeta de Canciones</span>
-                {isFav && <span className="text-xs bg-rose-500/20 text-rose-400 border border-rose-500/30 px-2 py-0.5 rounded-full font-semibold">Favoritas ❤️</span>}
+                <span>Descargar Carpeta para Celular</span>
+                {isFav && (
+                  <span className="text-xs bg-rose-500/20 text-rose-400 border border-rose-500/30 px-2 py-0.5 rounded-full font-semibold">
+                    Favoritas ❤️
+                  </span>
+                )}
               </h3>
-              <p className="text-xs text-slate-400">
-                Descarga canciones completas (320kbps) y guárdalas para escuchar offline sin internet
+              <p className="text-xs text-purple-300 font-medium flex items-center gap-1">
+                <Smartphone className="w-3.5 h-3.5" /> Modo Offline Deezer • Canciones Completas
               </p>
             </div>
           </div>
@@ -203,13 +183,13 @@ export const FolderDownloadModal: React.FC<FolderDownloadModalProps> = ({
         </div>
 
         {/* Folder / Playlist Selector */}
-        <div className="my-4 p-4 rounded-2xl bg-slate-800/70 border border-slate-700/70 flex flex-wrap items-center justify-between gap-3">
+        <div className="my-3.5 p-3.5 rounded-2xl bg-slate-800/70 border border-slate-700/70 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <label className="block text-xs font-bold text-purple-300 uppercase tracking-wider mb-1">
+            <label className="block text-[11px] font-bold text-purple-300 uppercase tracking-wider mb-0.5">
               Carpeta a Procesar:
             </label>
             <p className="text-xs text-slate-300">
-              Canciones seleccionadas: <strong className="text-white font-bold">{targetTracks.length} canciones</strong>
+              Seleccionadas: <strong className="text-white font-bold">{targetTracks.length} canciones</strong>
               {isFav && <span className="text-rose-400 font-semibold ml-1">(Todas con corazón)</span>}
             </p>
           </div>
@@ -223,7 +203,9 @@ export const FolderDownloadModal: React.FC<FolderDownloadModalProps> = ({
             disabled={isProcessing}
             className="bg-slate-900 border border-purple-500/40 text-white rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-purple-400 font-semibold cursor-pointer max-w-xs"
           >
-            <option value="Favoritas ❤️">❤️ Favoritas (Canciones con Corazón: {tracks.filter((t) => t.isFavorite).length})</option>
+            <option value="Favoritas ❤️">
+              ❤️ Favoritas (Canciones con Corazón: {tracks.filter((t) => t.isFavorite).length})
+            </option>
             <option value="ALL">📁 Todas las canciones ({tracks.length})</option>
             {availablePlaylists
               .filter((pl) => !isFavoritesPlaylist(pl))
@@ -237,11 +219,11 @@ export const FolderDownloadModal: React.FC<FolderDownloadModalProps> = ({
 
         {/* Progress Display */}
         {isProcessing && (
-          <div className="mb-4 p-4 rounded-2xl bg-purple-950/40 border border-purple-500/40 text-center animate-pulse">
+          <div className="mb-3.5 p-3.5 rounded-2xl bg-purple-950/40 border border-purple-500/40 text-center animate-pulse">
             <p className="text-xs font-semibold text-purple-200 mb-2 truncate">
-              {progress.statusText || 'Procesando canciones...'}
+              {progress.statusText || 'Procesando canciones completas...'}
             </p>
-            <div className="w-full h-3 bg-slate-800 rounded-full overflow-hidden mb-2">
+            <div className="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden mb-2">
               <div
                 className="h-full bg-gradient-to-r from-purple-500 to-indigo-500 transition-all duration-200"
                 style={{ width: `${percent}%` }}
@@ -255,10 +237,10 @@ export const FolderDownloadModal: React.FC<FolderDownloadModalProps> = ({
 
         {/* Finished Success Notice */}
         {finishedMessage && (
-          <div className="mb-4 p-4 rounded-2xl bg-emerald-950/50 border border-emerald-500/50 flex items-start gap-3">
+          <div className="mb-3.5 p-3.5 rounded-2xl bg-emerald-950/50 border border-emerald-500/50 flex items-start gap-3">
             <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
             <div>
-              <p className="text-xs font-bold text-emerald-200">¡Operación completada con éxito!</p>
+              <p className="text-xs font-bold text-emerald-200">¡Completado con éxito!</p>
               <p className="text-[11px] text-slate-300 mt-0.5 leading-relaxed">
                 {finishedMessage}
               </p>
@@ -266,161 +248,151 @@ export const FolderDownloadModal: React.FC<FolderDownloadModalProps> = ({
           </div>
         )}
 
-        {/* Download Options */}
-        <div className="space-y-3 mb-4">
-          <div className="flex items-center justify-between">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              Opciones de Descarga y Offline
-            </h4>
-            <span className="text-[11px] text-purple-400 font-medium">
-              Canciones completas sin límites
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* OPTION 1: FULL SONGS BATCH DOWNLOADER (Windows & Mac/Linux) */}
-            <div className="p-4 rounded-2xl bg-gradient-to-br from-purple-950/50 via-slate-800/80 to-slate-900 border border-purple-500/50 flex flex-col justify-between shadow-lg relative overflow-hidden group">
-              <div className="absolute top-0 right-0 px-2.5 py-0.5 bg-purple-600 text-[10px] font-bold text-white rounded-bl-xl uppercase tracking-wider">
-                Completa 320k
-              </div>
-
-              <div>
-                <div className="flex items-center gap-2 mb-1.5">
-                  <Terminal className="w-4 h-4 text-purple-400" />
-                  <p className="text-xs font-bold text-white">Descargador Completo 1-Click</p>
-                </div>
-                <p className="text-[11px] text-slate-300 leading-relaxed mb-3">
-                  Descarga <strong>todas las canciones completas (3-5 min)</strong> en alta calidad MP3 (320kbps) con carátula y etiquetas dentro de una carpeta llamada <em>"{cleanFolderName}"</em>.
-                </p>
-              </div>
-
-              <div className="flex flex-col gap-1.5 pt-2">
-                <button
-                  type="button"
-                  onClick={handleDownloadFullLengthScripts}
-                  disabled={isProcessing || targetTracks.length === 0}
-                  className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-semibold text-xs transition-colors shadow-md shadow-purple-600/30"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Script Windows (.bat) + M3U</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDownloadShScript}
-                  disabled={isProcessing || targetTracks.length === 0}
-                  className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-medium text-[11px] transition-colors"
-                >
-                  <Terminal className="w-3 h-3 text-slate-400" />
-                  <span>Script macOS / Linux (.sh)</span>
-                </button>
-              </div>
+        {/* Mobile Download & Offline Options */}
+        <div className="space-y-3 mb-3">
+          {/* OPTION 1: DEEZER IN-APP OFFLINE MODE (HERO OPTION) */}
+          <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-950/60 via-slate-800/90 to-slate-900 border border-emerald-500/50 flex flex-col justify-between shadow-xl relative overflow-hidden">
+            <div className="absolute top-0 right-0 px-2.5 py-0.5 bg-emerald-600 text-[10px] font-bold text-white rounded-bl-xl uppercase tracking-wider">
+              Offline Deezer
             </div>
 
-            {/* OPTION 2: SAVE TO IN-APP OFFLINE STORAGE (IndexedDB) */}
-            <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-950/40 via-slate-800/80 to-slate-900 border border-emerald-500/40 flex flex-col justify-between shadow-lg">
+            <div>
+              <div className="flex items-center gap-2 mb-1.5">
+                <HardDrive className="w-4 h-4 text-emerald-400" />
+                <p className="text-xs font-bold text-white">
+                  Guardar en Memoria del Celular para Escuchar Sin Internet
+                </p>
+              </div>
+              <p className="text-[11px] text-slate-300 leading-relaxed mb-3">
+                Emula el <strong>Modo Offline de Deezer</strong>. Almacena las canciones completas en la memoria local de la app en tu teléfono para reproducirlas sin gastar datos ni wifi, con pantalla bloqueada o en segundo plano.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleSaveToAppOffline}
+              disabled={isProcessing || targetTracks.length === 0}
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-98 disabled:opacity-50 text-white font-bold text-xs transition-all shadow-md shadow-emerald-600/30"
+            >
+              <Headphones className="w-4 h-4" />
+              <span>Activar Modo Offline para "{cleanFolderName}" ({targetTracks.length})</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {/* OPTION 2: DOWNLOAD MOBILE M3U PLAYLIST */}
+            <div className="p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700/80 flex flex-col justify-between hover:border-purple-500/40 transition-colors">
               <div>
-                <div className="flex items-center gap-2 mb-1.5">
-                  <HardDrive className="w-4 h-4 text-emerald-400" />
-                  <p className="text-xs font-bold text-white">Guardar en la App para Offline</p>
+                <div className="flex items-center gap-2 mb-1">
+                  <ListMusic className="w-4 h-4 text-purple-400" />
+                  <p className="text-xs font-bold text-white">Lista de Reproducción Móvil (.M3U)</p>
                 </div>
-                <p className="text-[11px] text-slate-300 leading-relaxed mb-3">
-                  Almacena las canciones directamente en la memoria interna de la aplicación (IndexedDB). Podrás escucharlas en el reproductor <strong>sin consumir datos ni wifi</strong>.
+                <p className="text-[11px] text-slate-400 leading-relaxed mb-2.5">
+                  Compatible directamente con <strong>VLC para Android/iPhone</strong>, Poweramp, Musicolet o cualquier reproductor de tu teléfono.
                 </p>
               </div>
 
               <button
                 type="button"
-                onClick={handleSaveToAppOffline}
+                onClick={handleDownloadM3U}
                 disabled={isProcessing || targetTracks.length === 0}
-                className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold text-xs transition-colors shadow-md shadow-emerald-600/30"
+                className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-purple-600 hover:bg-purple-500 active:scale-98 text-white font-semibold text-xs transition-colors shadow-md shadow-purple-600/20"
               >
-                <HardDrive className="w-3.5 h-3.5" />
-                <span>Guardar Carpeta Offline ({targetTracks.length})</span>
+                <Download className="w-3.5 h-3.5" />
+                <span>Descargar Playlist .M3U</span>
               </button>
             </div>
 
-            {/* OPTION 3: STRUCTURED ZIP ARCHIVE */}
-            <div className="p-4 rounded-2xl bg-slate-800/80 border border-slate-700 flex flex-col justify-between hover:border-slate-600 transition-colors">
+            {/* OPTION 3: DOWNLOAD MOBILE ZIP */}
+            <div className="p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700/80 flex flex-col justify-between hover:border-indigo-500/40 transition-colors">
               <div>
-                <div className="flex items-center gap-2 mb-1.5">
+                <div className="flex items-center gap-2 mb-1">
                   <FolderArchive className="w-4 h-4 text-indigo-400" />
-                  <p className="text-xs font-bold text-white">Archivo ZIP con Subcarpeta</p>
+                  <p className="text-xs font-bold text-white">Paquete ZIP para Celular</p>
                 </div>
-                <p className="text-[11px] text-slate-400 leading-relaxed mb-3">
-                  Genera un archivo ZIP estructurado con las pistas de esta carpeta numeradas y su lista de reproducción .M3U lista para abrir en cualquier reproductor.
+                <p className="text-[11px] text-slate-400 leading-relaxed mb-2">
+                  Empaqueta la lista M3U y las canciones completas MP3 en carpetas organizadas para tu móvil.
                 </p>
+                <div className="mb-2.5 px-2.5 py-1 rounded-lg bg-slate-900/80 border border-slate-700/60 text-[10px]">
+                  {localTracksCount > 0 ? (
+                    <span className="text-emerald-400 font-semibold">
+                      ✓ {localTracksCount} audios MP3 en memoria listos para empaquetar
+                    </span>
+                  ) : (
+                    <span className="text-slate-400">
+                      Incluye lista .M3U (o carga archivos MP3 para empaquetar los audios)
+                    </span>
+                  )}
+                </div>
               </div>
 
               <button
                 type="button"
                 onClick={handleDownloadZipByFolder}
                 disabled={isProcessing || targetTracks.length === 0}
-                className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold text-xs transition-colors shadow-md"
+                className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-98 text-white font-semibold text-xs transition-colors shadow-md"
               >
                 <FolderArchive className="w-3.5 h-3.5" />
                 <span>Descargar ZIP ({targetTracks.length})</span>
               </button>
             </div>
-
-            {/* OPTION 4: DIRECT DIRECTORY ON PC OR IMPORT LOCAL AUDIO */}
-            <div className="p-4 rounded-2xl bg-slate-800/80 border border-slate-700 flex flex-col justify-between hover:border-slate-600 transition-colors">
-              <div>
-                <div className="flex items-center gap-2 mb-1.5">
-                  <Folder className="w-4 h-4 text-amber-400" />
-                  <p className="text-xs font-bold text-white">Importar o Guardar en Disco</p>
-                </div>
-                <p className="text-[11px] text-slate-400 leading-relaxed mb-3">
-                  {onImportLocalAudio
-                    ? '¿Tienes ya archivos MP3 completos en tu computadora o teléfono? Puedes agregarlos directamente a esta carpeta para escucharlos offline.'
-                    : 'Guarda las canciones directamente en una carpeta de tu disco duro con Chrome o Edge.'}
-                </p>
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                {onImportLocalAudio && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onClose();
-                      onImportLocalAudio();
-                    }}
-                    className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs transition-colors shadow-md"
-                  >
-                    <Upload className="w-3.5 h-3.5" />
-                    <span>Cargar Archivos MP3 a esta Carpeta</span>
-                  </button>
-                )}
-
-                {hasFileSystemAccess && (
-                  <button
-                    type="button"
-                    onClick={handleSaveToDirectory}
-                    disabled={isProcessing || targetTracks.length === 0}
-                    className="w-full flex items-center justify-center gap-2 py-1.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors"
-                  >
-                    <Folder className="w-3.5 h-3.5" />
-                    <span>Elegir Carpeta en PC</span>
-                  </button>
-                )}
-              </div>
-            </div>
           </div>
+
+          {/* OPTION 4: IMPORT LOCAL AUDIO FROM PHONE */}
+          {onImportLocalAudio && (
+            <div className="p-3 rounded-2xl bg-slate-800/60 border border-slate-700/70 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+                  <Upload className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-white truncate">¿Tienes archivos MP3 en tu celular?</p>
+                  <p className="text-[10px] text-slate-400 truncate">Importa audios de tus descargas para reproducirlos sin conexión</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onImportLocalAudio();
+                }}
+                className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 active:scale-95 text-white font-semibold text-xs rounded-xl transition-all shadow-md shrink-0"
+              >
+                Cargar Audios
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* Note on Background Playback and Offline */}
-        <div className="p-3.5 rounded-2xl bg-slate-800/40 border border-slate-700/60 flex items-start gap-2.5 text-xs text-slate-300">
-          <HelpCircle className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
-          <p className="text-[11px] text-slate-400 leading-relaxed">
-            <strong className="text-slate-200">Reproducción en segundo plano:</strong> Las canciones guardadas offline utilizan la API nativa de reproducción con soporte de pantalla bloqueada (MediaSession API). Podrás salir de la app, bloquear tu celular o cambiar de pestaña y la música continuará reproduciéndose ininterrumpidamente.
-          </p>
-        </div>
+        {/* Clear 30s Audio Cache Option */}
+        {onClearOfflineCache && (
+          <div className="mt-1 p-3 rounded-2xl bg-rose-950/30 border border-rose-500/30 flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2 text-rose-300">
+              <Trash2 className="w-4 h-4 text-rose-400 shrink-0" />
+              <span>Limpiar todo el caché de audios y resetear almacenamiento</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                onClearOfflineCache();
+                setFinishedMessage('Todo el caché y almacenamiento temporal ha sido eliminado con éxito.');
+              }}
+              className="px-2.5 py-1 bg-rose-600 hover:bg-rose-500 active:scale-95 text-white font-semibold text-[11px] rounded-lg transition-colors shrink-0 ml-2"
+            >
+              Borrar Caché
+            </button>
+          </div>
+        )}
 
         {/* Footer */}
-        <div className="pt-4 mt-2 border-t border-slate-800 flex justify-end">
+        <div className="pt-3.5 mt-2 border-t border-slate-800 flex items-center justify-between">
+          <p className="text-[11px] text-slate-500">
+            Deezer Library Hub • Móvil 100%
+          </p>
           <button
             type="button"
             onClick={onClose}
-            className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs rounded-xl transition-colors"
+            className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs rounded-xl transition-colors"
           >
             Cerrar
           </button>

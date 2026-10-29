@@ -21,6 +21,7 @@ import {
   ChevronRight,
   FolderDown,
   HardDrive,
+  Trash2,
 } from 'lucide-react';
 import { PWAInstallButton } from './PWAInstallButton';
 
@@ -47,6 +48,7 @@ interface NavbarProps {
   onOpenSleepTimer?: () => void;
   onOpenLyrics?: () => void;
   hasActiveTrack?: boolean;
+  onClearOfflineCache?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -72,6 +74,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenSleepTimer,
   onOpenLyrics,
   hasActiveTrack,
+  onClearOfflineCache,
 }) => {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
@@ -624,6 +627,27 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </button>
               </div>
             </div>
+
+            {/* Clear 30s Audio Cache */}
+            {onClearOfflineCache && (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMobileMenu(false);
+                  onClearOfflineCache();
+                }}
+                className="w-full flex items-center justify-between p-3 rounded-xl bg-rose-950/30 border border-rose-500/30 text-left text-xs font-semibold text-rose-300 hover:bg-rose-900/30 transition-colors"
+              >
+                <div className="flex items-center gap-2.5">
+                  <Trash2 className="w-4 h-4 text-rose-400 shrink-0" />
+                  <div>
+                    <p className="text-white font-bold">Limpiar Caché de Canciones (30s)</p>
+                    <p className="text-[10px] text-rose-300">Borra clips de 30s descargados en memoria</p>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-rose-400" />
+              </button>
+            )}
 
             {/* Footer Utilities */}
             <div className="pt-2 border-t border-slate-800 flex items-center justify-between gap-2">

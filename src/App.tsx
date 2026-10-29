@@ -44,6 +44,7 @@ import {
   downloadAndSavePlaylistOffline,
   removePlaylistOffline,
   saveOfflineAudio,
+  clearAllOfflineAudio,
 } from './utils/offlineAudioStorage';
 import { downloadTrackAudio, triggerFileDownload } from './utils/downloadHelper';
 import defaultCsvRaw from '../public/assets/aistudio/My_Deezer_Library_e6092c00.csv?raw';
@@ -196,17 +197,67 @@ export default function App() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const synthStopRef = useRef<(() => void) | null>(null);
 
+  // Handler to purge all cached 30-second clips from IndexedDB and storage
+  const handleClearOfflineCache = useCallback(async (isAuto = false) => {
+    try {
+      await clearAllOfflineAudio();
+
+      if (typeof window !== 'undefined' && 'caches' in window) {
+        try {
+          const cacheKeys = await window.caches.keys();
+          for (const key of cacheKeys) {
+            await window.caches.delete(key);
+          }
+        } catch {}
+      }
+
+      try {
+        localStorage.removeItem(OFFLINE_PLAYLISTS_KEY);
+        localStorage.setItem('deezer_offline_cache_cleared_v5', 'true');
+      } catch {}
+
+      setOfflineTrackIds(new Set());
+      setOfflinePlaylists({});
+      setTracks((prev) =>
+        prev.map((t) => (t.type === 'Local' ? t : { ...t, isOfflineAvailable: false }))
+      );
+
+      // If active audio is a blob from 30s preview cache, stop it
+      if (audioRef.current && audioRef.current.src.startsWith('blob:')) {
+        audioRef.current.pause();
+        audioRef.current.removeAttribute('src');
+        setIsPlaying(false);
+      }
+
+      if (!isAuto) {
+        showToast('🧹 ¡Todo el caché ha sido eliminado con éxito!');
+      }
+    } catch (err) {
+      console.error('Error clearing offline audio cache', err);
+      if (!isAuto) {
+        showToast('Error al limpiar caché de audios');
+      }
+    }
+  }, [showToast]);
+
   // 1. Initial Load: Read CSV or LocalStorage & Offline tracks
   useEffect(() => {
     initTrackCache();
     initVideoIdCache();
 
-    // Query all locally cached offline audio files
-    getAllOfflineTrackIds()
-      .then((ids) => {
-        setOfflineTrackIds(ids);
-      })
-      .catch(() => {});
+    // Automatically purge previously cached 30s snippets on this update
+    const hasClearedOld30s = localStorage.getItem('deezer_offline_cache_cleared_v5');
+    if (!hasClearedOld30s) {
+      handleClearOfflineCache(true).then(() => {
+        showToast('🧹 Caché purgado por completo. Listo para canciones completas.');
+      });
+    } else {
+      getAllOfflineTrackIds()
+        .then((ids) => {
+          setOfflineTrackIds(ids);
+        })
+        .catch(() => {});
+    }
 
     try {
       const savedCustom = localStorage.getItem(CUSTOM_PLAYLISTS_KEY);
@@ -227,7 +278,7 @@ export default function App() {
       }
     } catch {}
     setIsLoading(false);
-  }, []);
+  }, [handleClearOfflineCache, showToast]);
 
   // Restore original library callback
   const handleRestoreOriginalLibrary = useCallback(() => {
@@ -334,7 +385,7 @@ export default function App() {
     }
   };
 
-  // Direct MP3 download handler: triggers full-song download or opens FullTrackDownloadModal
+  // Direct MP3 download handler: triggers full-song download directly without intermediate modal
   const handleDirectDownloadTrack = async (track: Track) => {
     try {
       const blob = await getOfflineAudioBlob(track.id);
@@ -347,8 +398,18 @@ export default function App() {
       }
     } catch {}
 
-    // Open FullTrackDownloadModal for full-song MP3 portals (yout.com, dirpy.com, etc.)
-    setDownloadModalTrack(track);
+    // Resolve direct download without showing intermediate link modal
+    showToast(`Iniciando descarga directa de "${track.title}"...`);
+    try {
+      const vid = await getFullTrackVideoId(track);
+      if (vid) {
+        window.open(`https://yout.com/video/${vid}`, '_blank');
+        return;
+      }
+    } catch {}
+
+    const query = encodeURIComponent(`${track.artist} ${track.title}`);
+    window.open(`https://dirpy.com/studio?url=https://www.youtube.com/results?search_query=${query}`, '_blank');
   };
 
   // Save custom playlists
@@ -1177,6 +1238,7 @@ export default function App() {
         onOpenSleepTimer={() => setIsSleepTimerOpen(true)}
         onOpenLyrics={() => setIsLyricsOpen(true)}
         hasActiveTrack={currentTrack !== null}
+        onClearOfflineCache={handleClearOfflineCache}
       />
 
       {/* Main Layout: Desktop Sidebar + Track Table, OR Mobile Dedicated Tabs */}
@@ -1203,6 +1265,7 @@ export default function App() {
           hasCurrentTrack={currentTrack !== null}
           offlinePlaylists={offlinePlaylists}
           onToggleFolderOffline={handleTogglePlaylistOffline}
+          onClearOfflineCache={handleClearOfflineCache}
         />
 
         {/* =========================================
@@ -1461,6 +1524,8 @@ export default function App() {
               onRestoreOriginalLibrary={handleRestoreOriginalLibrary}
               hasActiveTrack={currentTrack !== null}
               sleepTimerRemaining={sleepTimerSecondsRemaining}
+              onClearOfflineCache={handleClearOfflineCache}
+              offlineCount={tracks.filter((t) => offlineTrackIds.has(t.id) || t.isOfflineAvailable).length}
             />
           )}
         </div>
@@ -1552,7 +1617,8 @@ export default function App() {
         queueLength={queue.length}
         playbackSource={playbackSource}
         onTogglePlaybackSource={handleTogglePlaybackSource}
-        onOpenDownloadModal={(track) => setDownloadModalTrack(track)}
+        onOpenDownloadModal={(track) => handleDirectDownloadTrack(track)}
+        onDirectDownloadTrack={handleDirectDownloadTrack}
         onOpenLyrics={() => setIsLyricsOpen(true)}
         onOpenEqualizer={() => setIsEqualizerOpen(true)}
         onOpenSleepTimer={() => setIsSleepTimerOpen(true)}
@@ -1582,7 +1648,8 @@ export default function App() {
         onToggleFavorite={handleToggleFavorite}
         playbackSource={playbackSource}
         onTogglePlaybackSource={handleTogglePlaybackSource}
-        onOpenDownloadModal={(track) => setDownloadModalTrack(track)}
+        onOpenDownloadModal={(track) => handleDirectDownloadTrack(track)}
+        onDirectDownloadTrack={handleDirectDownloadTrack}
         onOpenLyrics={() => setIsLyricsOpen(true)}
         onOpenEqualizer={() => setIsEqualizerOpen(true)}
         onOpenSleepTimer={() => setIsSleepTimerOpen(true)}
@@ -1645,7 +1712,7 @@ export default function App() {
         onClose={() => setIsShortcutsOpen(false)}
       />
 
-      {/* Single Full Song Download Modal */}
+      {/* Single Full Song Download Modal (Kept for manual fallback only) */}
       <FullTrackDownloadModal
         isOpen={downloadModalTrack !== null}
         onClose={() => setDownloadModalTrack(null)}
@@ -1664,11 +1731,13 @@ export default function App() {
         tracks={tracks}
         availablePlaylists={availablePlaylistNames}
         initialFolder={folderDownloadInitialName}
+        offlineTrackIds={offlineTrackIds}
         onImportLocalAudio={() => localAudioInputRef.current?.click()}
         onRefreshOffline={async () => {
           const ids = await getAllOfflineTrackIds();
           setOfflineTrackIds(ids);
         }}
+        onClearOfflineCache={handleClearOfflineCache}
       />
 
       {/* Song Discovery & Web Add Modal */}

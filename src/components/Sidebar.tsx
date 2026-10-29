@@ -44,6 +44,7 @@ interface SidebarProps {
   hasCurrentTrack?: boolean;
   offlinePlaylists?: Record<string, boolean>;
   onToggleFolderOffline?: (folderName: string) => void;
+  onClearOfflineCache?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -67,6 +68,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   hasCurrentTrack,
   offlinePlaylists,
   onToggleFolderOffline,
+  onClearOfflineCache,
 }) => {
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
@@ -392,6 +394,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <span>Temporizador de Apagado</span>
               </div>
               <span className="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded font-mono">T</span>
+            </button>
+          )}
+
+          {onClearOfflineCache && (
+            <button
+              type="button"
+              onClick={onClearOfflineCache}
+              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs hover:bg-rose-500/10 text-rose-300 hover:text-rose-200 transition-colors"
+              title="Borrar todas las canciones de 30s descargadas en caché y liberar espacio"
+            >
+              <div className="flex items-center gap-2">
+                <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                <span>Limpiar Caché de Audios</span>
+              </div>
+              {offlineCount > 0 && (
+                <span className="text-[10px] text-rose-400 bg-rose-500/20 px-1.5 py-0.5 rounded font-mono">
+                  {offlineCount}
+                </span>
+              )}
             </button>
           )}
         </div>

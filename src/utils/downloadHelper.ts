@@ -1,8 +1,7 @@
 import JSZip from 'jszip';
 import { Track } from '../types/music';
 import { exportToCSV, generateM3U } from './csvParser';
-import { getTrackDetails } from './deezerService';
-import { saveOfflineAudio } from './offlineAudioStorage';
+import { getOfflineAudioBlob } from './offlineAudioStorage';
 
 /**
  * Downloads a single file in the browser using an anchor tag and Blob / ObjectURL.
@@ -52,33 +51,20 @@ export function downloadTracksAsJSON(tracks: Track[], filename = 'Biblioteca_Can
 }
 
 /**
- * Downloads the MP3 audio for a track and caches it in IndexedDB for offline app playback.
+ * Downloads the MP3 audio for a track if full audio is available in storage.
+ * Note: 30s previews are strictly excluded from being saved or served as downloads.
  */
 export async function downloadTrackAudio(track: Track): Promise<boolean> {
   try {
-    let previewUrl = track.previewUrl;
-    if (!previewUrl) {
-      const details = await getTrackDetails(track);
-      previewUrl = details.previewUrl;
+    const blob = await getOfflineAudioBlob(track.id);
+    if (blob) {
+      const safeArtist = (track.artist || 'Artista').replace(/[/\\?%*:|"<>]/g, '_');
+      const safeTitle = (track.title || 'Canción').replace(/[/\\?%*:|"<>]/g, '_');
+      triggerFileDownload(blob, `${safeArtist} - ${safeTitle}.mp3`);
+      return true;
     }
-
-    if (!previewUrl) {
-      throw new Error('No se encontró archivo de audio para esta pista.');
-    }
-
-    const response = await fetch(previewUrl);
-    if (!response.ok) throw new Error('Error al descargar el audio desde la red.');
-    const blob = await response.blob();
-
-    // Cache in IndexedDB for in-app offline playback
-    try {
-      await saveOfflineAudio(track, blob);
-    } catch {}
-
-    const safeArtist = (track.artist || 'Artista').replace(/[/\\?%*:|"<>]/g, '_');
-    const safeTitle = (track.title || 'Canción').replace(/[/\\?%*:|"<>]/g, '_');
-    triggerFileDownload(blob, `${safeArtist} - ${safeTitle}.mp3`);
-    return true;
+    // No 30s previews allowed as downloaded mp3s
+    return false;
   } catch (err) {
     console.error('Failed to download single track audio', err);
     return false;
@@ -86,7 +72,7 @@ export async function downloadTrackAudio(track: Track): Promise<boolean> {
 }
 
 /**
- * Caches an entire list/folder of tracks into IndexedDB for offline app playback
+ * Checks and confirms available offline tracks. 30s previews are never cached.
  */
 export async function cacheTracksForOffline(
   tracks: Track[],
@@ -101,22 +87,12 @@ export async function cacheTracksForOffline(
     onProgress?.(i + 1, total, `${track.artist} - ${track.title}`);
 
     try {
-      let previewUrl = track.previewUrl;
-      if (!previewUrl) {
-        const details = await getTrackDetails(track);
-        previewUrl = details.previewUrl;
+      const blob = await getOfflineAudioBlob(track.id);
+      if (blob) {
+        successCount++;
+      } else {
+        failCount++;
       }
-
-      if (previewUrl) {
-        const res = await fetch(previewUrl);
-        if (res.ok) {
-          const blob = await res.blob();
-          await saveOfflineAudio(track, blob);
-          successCount++;
-          continue;
-        }
-      }
-      failCount++;
     } catch {
       failCount++;
     }
@@ -175,30 +151,16 @@ export async function downloadTracksByFolderZip(
       onProgress?.(processed, total, `[${folderName}] ${track.artist} - ${track.title}`);
 
       try {
-        let previewUrl = track.previewUrl;
-        if (!previewUrl) {
-          const details = await getTrackDetails(track);
-          previewUrl = details.previewUrl;
+        const blob = await getOfflineAudioBlob(track.id);
+        if (blob) {
+          const safeArtist = (track.artist || 'Artista').replace(/[/\\?%*:|"<>]/g, '_');
+          const safeTitle = (track.title || 'Cancion').replace(/[/\\?%*:|"<>]/g, '_');
+          const trackNum = String(i + 1).padStart(2, '0');
+          folder?.file(`${trackNum}. ${safeArtist} - ${safeTitle}.mp3`, blob);
+          successCount++;
+        } else {
+          failCount++;
         }
-
-        if (previewUrl) {
-          const res = await fetch(previewUrl);
-          if (res.ok) {
-            const blob = await res.blob();
-            // Cache in IndexedDB for offline app playback
-            try {
-              await saveOfflineAudio(track, blob);
-            } catch {}
-
-            const safeArtist = (track.artist || 'Artista').replace(/[/\\?%*:|"<>]/g, '_');
-            const safeTitle = (track.title || 'Cancion').replace(/[/\\?%*:|"<>]/g, '_');
-            const trackNum = String(i + 1).padStart(2, '0');
-            folder?.file(`${trackNum}. ${safeArtist} - ${safeTitle}.mp3`, blob);
-            successCount++;
-            continue;
-          }
-        }
-        failCount++;
       } catch {
         failCount++;
       }
@@ -223,75 +185,6 @@ export async function downloadBatchZip(
   return downloadTracksByFolderZip(tracks, zipFilename, onProgress);
 }
 
-/**
- * Downloads files directly to a folder on the user's computer via File System Access API
- */
-export async function downloadToLocalDirectoryPicker(
-  tracks: Track[],
-  onProgress?: (current: number, total: number, statusText: string) => void
-): Promise<{ successCount: number; failCount: number } | null> {
-  if (typeof window === 'undefined' || !(window as any).showDirectoryPicker) {
-    return null; // Not supported in Firefox / Safari, falls back to ZIP
-  }
-
-  try {
-    const dirHandle = await (window as any).showDirectoryPicker();
-    let successCount = 0;
-    let failCount = 0;
-    const total = tracks.length;
-
-    for (let i = 0; i < tracks.length; i++) {
-      const track = tracks[i];
-      onProgress?.(i + 1, total, `${track.artist} - ${track.title}`);
-
-      try {
-        let previewUrl = track.previewUrl;
-        if (!previewUrl) {
-          const details = await getTrackDetails(track);
-          previewUrl = details.previewUrl;
-        }
-
-        if (previewUrl) {
-          const res = await fetch(previewUrl);
-          if (res.ok) {
-            const blob = await res.blob();
-            // Cache in IndexedDB
-            try {
-              await saveOfflineAudio(track, blob);
-            } catch {}
-
-            // Playlist subfolder
-            const plName = (track.playlist || 'General').replace(/[/\\?%*:|"<>]/g, '_');
-            const subDirHandle = await dirHandle.getDirectoryHandle(plName, { create: true });
-
-            const safeArtist = (track.artist || 'Artista').replace(/[/\\?%*:|"<>]/g, '_');
-            const safeTitle = (track.title || 'Cancion').replace(/[/\\?%*:|"<>]/g, '_');
-            const fileHandle = await subDirHandle.getFileHandle(`${safeArtist} - ${safeTitle}.mp3`, {
-              create: true,
-            });
-            const writable = await fileHandle.createWritable();
-            await writable.write(blob);
-            await writable.close();
-
-            successCount++;
-            continue;
-          }
-        }
-        failCount++;
-      } catch {
-        failCount++;
-      }
-    }
-
-    return { successCount, failCount };
-  } catch (err: any) {
-    if (err.name === 'AbortError') {
-      return null;
-    }
-    console.error('Error saving directly to directory', err);
-    return null;
-  }
-}
 
 /**
  * Streaming service links generator

@@ -14,6 +14,7 @@ import {
   Heart,
   CheckCircle2,
   FolderDown,
+  Trash2,
 } from 'lucide-react';
 import { PWAInstallButton } from './PWAInstallButton';
 
@@ -36,6 +37,8 @@ interface MobileToolsViewProps {
   onRestoreOriginalLibrary: () => void;
   hasActiveTrack: boolean;
   sleepTimerRemaining: number | null;
+  onClearOfflineCache?: () => void;
+  offlineCount?: number;
 }
 
 export const MobileToolsView: React.FC<MobileToolsViewProps> = ({
@@ -57,6 +60,8 @@ export const MobileToolsView: React.FC<MobileToolsViewProps> = ({
   onRestoreOriginalLibrary,
   hasActiveTrack,
   sleepTimerRemaining,
+  onClearOfflineCache,
+  offlineCount = 0,
 }) => {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -265,6 +270,32 @@ export const MobileToolsView: React.FC<MobileToolsViewProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Clear 30s Audio Cache Card */}
+      {onClearOfflineCache && (
+        <div className="bg-slate-900/90 border border-rose-500/30 rounded-2xl p-4 flex items-center justify-between shadow-lg">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center border border-rose-500/30 shrink-0">
+              <Trash2 className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-white">Limpiar Caché de Audios (30s)</h4>
+              <p className="text-xs text-slate-400">
+                {offlineCount > 0
+                  ? `${offlineCount} canciones en caché local temporal`
+                  : 'Elimina canciones de 30s guardadas para liberar espacio'}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClearOfflineCache}
+            className="px-3 py-1.5 bg-rose-600/80 hover:bg-rose-600 active:scale-95 text-white text-xs font-semibold rounded-xl transition-all shadow-md shrink-0 ml-2"
+          >
+            Limpiar
+          </button>
+        </div>
+      )}
 
       {/* Stats Summary Card */}
       <div

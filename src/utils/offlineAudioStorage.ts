@@ -244,8 +244,36 @@ export async function importLocalAudioFiles(
 }
 
 /**
+ * Completely purges all cached offline audio tracks from IndexedDB
+ */
+export async function clearAllOfflineAudio(): Promise<void> {
+  try {
+    const db = await getDB();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.clear();
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  } catch (err) {
+    console.warn('Error clearing IndexedDB store, attempting full database reset', err);
+    if (typeof window !== 'undefined' && window.indexedDB) {
+      dbPromise = null;
+      await new Promise<void>((resolve) => {
+        const req = window.indexedDB.deleteDatabase(DB_NAME);
+        req.onsuccess = () => resolve();
+        req.onerror = () => resolve();
+        req.onblocked = () => resolve();
+      });
+    }
+  }
+}
+
+/**
  * Downloads and caches all tracks of a playlist into IndexedDB for 100% offline playback.
- * Supports concurrent batching for speed and cancellation checks without blocking the UI.
+ * NOTE: 30-second previews are strictly prohibited from being cached as offline audio.
+ * Only genuine full-length audio tracks (local imports or direct streams) are kept.
  */
 export async function downloadAndSavePlaylistOffline(
   tracks: Track[],
@@ -271,28 +299,14 @@ export async function downloadAndSavePlaylistOffline(
       onProgress?.(completedCount + 1, total, `${t.artist} - ${t.title}`, t.id);
 
       try {
-        let blob = await getOfflineAudioBlob(t.id);
-        if (!blob) {
-          let previewUrl = t.previewUrl;
-          if (!previewUrl) {
-            const details = await getTrackDetails(t);
-            previewUrl = details.previewUrl;
-          }
-          if (previewUrl && !isCancelled?.()) {
-            const res = await fetch(previewUrl);
-            if (res.ok) {
-              blob = await res.blob();
-              await saveOfflineAudio(t, blob);
-            }
-          }
-        }
-
+        const blob = await getOfflineAudioBlob(t.id);
+        // Only count genuine offline audio blobs (never fetch 30s previews into cache!)
         if (blob) {
           savedIds.push(t.id);
           onTrackSaved?.(t.id);
         }
       } catch (e) {
-        console.warn('Error saving offline track in playlist batch', t.id, e);
+        console.warn('Error verifying offline track in playlist batch', t.id, e);
       } finally {
         completedCount++;
         onProgress?.(completedCount, total, `${t.artist} - ${t.title}`, t.id);
@@ -316,3 +330,4 @@ export async function removePlaylistOffline(tracks: Track[]): Promise<void> {
     } catch {}
   }
 }
+

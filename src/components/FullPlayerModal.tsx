@@ -1,4 +1,3 @@
-import React, { useState } from 'react';
 import {
   X,
   Play,
@@ -12,7 +11,6 @@ import {
   VolumeX,
   Heart,
   Download,
-  ExternalLink,
   Disc,
   Radio,
   Share2,
@@ -22,7 +20,6 @@ import {
 } from 'lucide-react';
 import { Track } from '../types/music';
 import { AudioVisualizer } from './AudioVisualizer';
-import { downloadTrackAudio, getStreamingLinks } from '../utils/downloadHelper';
 
 interface FullPlayerModalProps {
   isOpen: boolean;
@@ -44,9 +41,10 @@ interface FullPlayerModalProps {
   repeatMode: 'off' | 'all' | 'one';
   onCycleRepeat: () => void;
   onToggleFavorite: (id: string) => void;
-  playbackSource: 'full' | 'preview';
-  onTogglePlaybackSource: () => void;
+  playbackSource?: 'full' | 'preview';
+  onTogglePlaybackSource?: () => void;
   onOpenDownloadModal: (track: Track) => void;
+  onDirectDownloadTrack?: (track: Track) => void;
   onOpenLyrics?: () => void;
   onOpenEqualizer?: () => void;
   onOpenSleepTimer?: () => void;
@@ -76,14 +74,13 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
   playbackSource,
   onTogglePlaybackSource,
   onOpenDownloadModal,
+  onDirectDownloadTrack,
   onOpenLyrics,
   onOpenEqualizer,
   onOpenSleepTimer,
   sleepTimerRemaining,
 }) => {
   if (!isOpen || !track) return null;
-
-  const links = getStreamingLinks(track);
 
   const formatTime = (secs: number) => {
     if (isNaN(secs) || secs < 0) return '0:00';
@@ -96,7 +93,11 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
     duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0;
 
   const handleDownload = () => {
-    onOpenDownloadModal(track);
+    if (onDirectDownloadTrack) {
+      onDirectDownloadTrack(track);
+    } else {
+      onOpenDownloadModal(track);
+    }
   };
 
   return (
@@ -106,37 +107,16 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
 
       <div className="relative w-full max-w-lg bg-slate-900/95 border border-slate-800/90 rounded-3xl p-4 sm:p-7 shadow-2xl flex flex-col items-center text-white z-10 max-h-[95dvh] overflow-y-auto overflow-x-hidden scrollbar-none">
         {/* Top Header Bar */}
-        <div className="w-full flex items-center justify-between gap-2 mb-2 sm:mb-4">
+        <div className="w-full flex items-center justify-between gap-2 mb-2 sm:mb-3">
           <div className="flex items-center gap-1.5 text-xs text-purple-400 font-semibold tracking-wide uppercase shrink-0">
             <Radio className="w-4 h-4 animate-pulse" />
-            <span className="hidden sm:inline">Reproduciendo Ahora</span>
+            <span>Reproduciendo</span>
           </div>
 
-          {/* Mode Switch Pill in Modal */}
-          <div className="flex items-center bg-slate-800 p-0.5 rounded-xl border border-slate-700 text-xs shrink-0">
-            <button
-              type="button"
-              onClick={() => playbackSource !== 'full' && onTogglePlaybackSource()}
-              className={`px-2.5 sm:px-3 py-1 rounded-lg font-semibold transition-colors ${
-                playbackSource === 'full'
-                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              🎵 Completa
-            </button>
-            <button
-              type="button"
-              onClick={() => playbackSource !== 'preview' && onTogglePlaybackSource()}
-              className={`px-2.5 sm:px-3 py-1 rounded-lg font-medium transition-colors ${
-                playbackSource === 'preview'
-                  ? 'bg-purple-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-              title="Escuchar vista previa rápida de la canción"
-            >
-              ⚡ Escucha Rápida
-            </button>
+          <div className="flex items-center">
+            <span className="px-2.5 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 font-semibold text-[11px]">
+              🎵 Canción Completa
+            </span>
           </div>
 
           <button
@@ -150,9 +130,9 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
         </div>
 
         {/* Vinyl Disc Artwork with Rotation - Responsive & compact */}
-        <div className="relative my-2 sm:my-3 flex items-center justify-center shrink-0">
+        <div className="relative my-1.5 sm:my-2.5 flex items-center justify-center shrink-0">
           <div
-            className={`w-36 h-36 sm:w-52 sm:h-52 md:w-60 md:h-60 rounded-full p-2 bg-gradient-to-tr from-slate-950 via-slate-800 to-slate-900 shadow-2xl border-4 border-slate-700/50 flex items-center justify-center relative overflow-hidden ${
+            className={`w-32 h-32 sm:w-44 sm:h-44 md:w-52 md:h-52 rounded-full p-2 bg-gradient-to-tr from-slate-950 via-slate-800 to-slate-900 shadow-2xl border-4 border-slate-700/50 flex items-center justify-center relative overflow-hidden ${
               isPlaying ? 'animate-[spin_12s_linear_infinite]' : ''
             }`}
           >
@@ -162,7 +142,7 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
             <div className="absolute inset-7 sm:inset-10 rounded-full border border-slate-700/30 pointer-events-none" />
 
             {/* Inner Center Label / Cover Art */}
-            <div className="w-18 h-18 sm:w-26 sm:h-26 md:w-30 md:h-30 rounded-full overflow-hidden shadow-inner border-2 border-slate-600 relative z-10">
+            <div className="w-16 h-16 sm:w-22 sm:h-22 md:w-26 md:h-26 rounded-full overflow-hidden shadow-inner border-2 border-slate-600 relative z-10">
               {track.coverUrl ? (
                 <img
                   src={track.coverUrl}
@@ -171,13 +151,13 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
                 />
               ) : (
                 <div className="w-full h-full bg-gradient-to-tr from-purple-600 via-indigo-600 to-pink-600 flex items-center justify-center text-white">
-                  <Disc className="w-8 h-8" />
+                  <Disc className="w-7 h-7" />
                 </div>
               )}
             </div>
 
             {/* Center spindle hole */}
-            <div className="absolute w-4 h-4 rounded-full bg-slate-950 border-2 border-slate-600 z-20" />
+            <div className="absolute w-3.5 h-3.5 rounded-full bg-slate-950 border-2 border-slate-600 z-20" />
           </div>
         </div>
 
@@ -360,43 +340,11 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({
           <button
             type="button"
             onClick={handleDownload}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors shadow-md shadow-emerald-600/20"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors shadow-md shadow-emerald-600/20 active:scale-95"
           >
             <Download className="w-4 h-4" />
-            <span>Descargar Canción Completa</span>
+            <span>Descargar MP3 Completa</span>
           </button>
-
-          {track.deezerId && (
-            <a
-              href={links.deezer}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors"
-            >
-              <span>Deezer</span>
-              <ExternalLink className="w-3.5 h-3.5" />
-            </a>
-          )}
-
-          <a
-            href={links.spotify}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors"
-          >
-            <span>Spotify</span>
-            <ExternalLink className="w-3.5 h-3.5" />
-          </a>
-
-          <a
-            href={links.youtubeMusic}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors"
-          >
-            <span>YouTube</span>
-            <ExternalLink className="w-3.5 h-3.5" />
-          </a>
         </div>
       </div>
     </div>

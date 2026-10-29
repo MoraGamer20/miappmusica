@@ -776,13 +776,11 @@ export const TrackTable: React.FC<TrackTableProps> = ({
                   />
                 </button>
 
-                {/* 1-Tap Download Button */}
+                {/* 1-Tap Direct Download Button */}
                 <button
                   type="button"
                   onClick={() => {
-                    if (isDownloaded) {
-                      onOpenDownloadModal(track);
-                    } else if (onDirectDownloadTrack) {
+                    if (onDirectDownloadTrack) {
                       onDirectDownloadTrack(track);
                     } else {
                       onOpenDownloadModal(track);
@@ -1055,9 +1053,7 @@ export const TrackTable: React.FC<TrackTableProps> = ({
                       <button
                         type="button"
                         onClick={() => {
-                          if (isDownloaded) {
-                            onOpenDownloadModal(track);
-                          } else if (onDirectDownloadTrack) {
+                          if (onDirectDownloadTrack) {
                             onDirectDownloadTrack(track);
                           } else {
                             onOpenDownloadModal(track);
@@ -1197,7 +1193,11 @@ export const TrackTable: React.FC<TrackTableProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  onOpenDownloadModal(activeMenuTrack);
+                  if (onDirectDownloadTrack) {
+                    onDirectDownloadTrack(activeMenuTrack);
+                  } else {
+                    onOpenDownloadModal(activeMenuTrack);
+                  }
                   setActiveMenuTrack(null);
                 }}
                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-emerald-300 hover:bg-emerald-950/40 transition-colors"
