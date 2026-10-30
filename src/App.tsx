@@ -46,6 +46,7 @@ import {
   removePlaylistOffline,
   saveOfflineAudio,
   clearAllOfflineAudio,
+  purgeShortAudioCache,
 } from './utils/offlineAudioStorage';
 import { downloadTrackAudio, triggerFileDownload } from './utils/downloadHelper';
 import defaultCsvRaw from '../public/assets/aistudio/My_Deezer_Library_e6092c00.csv?raw';
@@ -218,6 +219,7 @@ export default function App() {
   // Handler to purge all cached 30-second clips from IndexedDB and storage
   const handleClearOfflineCache = useCallback(async (isAuto = false) => {
     try {
+      const { purgedCount } = await purgeShortAudioCache();
       await clearAllOfflineAudio();
 
       if (typeof window !== 'undefined' && 'caches' in window) {
@@ -231,7 +233,7 @@ export default function App() {
 
       try {
         localStorage.removeItem(OFFLINE_PLAYLISTS_KEY);
-        localStorage.setItem('deezer_offline_cache_cleared_v5', 'true');
+        localStorage.setItem('deezer_offline_cache_cleared_v7', 'true');
       } catch {}
 
       setOfflineTrackIds(new Set());
@@ -248,7 +250,11 @@ export default function App() {
       }
 
       if (!isAuto) {
-        showToast('🧹 ¡Todo el caché ha sido eliminado con éxito!');
+        showToast(
+          purgedCount > 0
+            ? `🧹 ¡Caché limpiado! Se eliminaron ${purgedCount} audios de 30 segundos.`
+            : '🧹 ¡Caché limpiado con éxito! Listo para canciones completas.'
+        );
       }
     } catch (err) {
       console.error('Error clearing offline audio cache', err);
@@ -263,19 +269,20 @@ export default function App() {
     initTrackCache();
     initVideoIdCache();
 
-    // Automatically purge previously cached 30s snippets on this update
-    const hasClearedOld30s = localStorage.getItem('deezer_offline_cache_cleared_v5');
-    if (!hasClearedOld30s) {
-      handleClearOfflineCache(true).then(() => {
-        showToast('🧹 Caché purgado por completo. Listo para canciones completas.');
+    // Automatically scan & delete any 30-second clips (< 1MB) from IndexedDB
+    purgeShortAudioCache()
+      .then(({ purgedCount }) => {
+        if (purgedCount > 0) {
+          showToast(`🧹 Se limpiaron ${purgedCount} audios de 30 segundos de la memoria caché.`);
+        }
+        return getAllOfflineTrackIds();
+      })
+      .then((ids) => {
+        setOfflineTrackIds(ids);
+      })
+      .catch(() => {
+        getAllOfflineTrackIds().then((ids) => setOfflineTrackIds(ids)).catch(() => {});
       });
-    } else {
-      getAllOfflineTrackIds()
-        .then((ids) => {
-          setOfflineTrackIds(ids);
-        })
-        .catch(() => {});
-    }
 
     try {
       const savedCustom = localStorage.getItem(CUSTOM_PLAYLISTS_KEY);
@@ -296,7 +303,7 @@ export default function App() {
       }
     } catch {}
     setIsLoading(false);
-  }, [handleClearOfflineCache, showToast]);
+  }, [showToast]);
 
   // Restore original library callback
   const handleRestoreOriginalLibrary = useCallback(() => {
@@ -429,33 +436,52 @@ export default function App() {
     }
   };
 
-  // Direct MP3 download handler: mobile-first, zero PC/.bat dependencies
+  // Direct MP3 download handler: 100% 1-click, zero menus, zero popup dialogs
   const handleDirectDownloadTrack = async (track: Track) => {
+    showToast(`Iniciando descarga completa de "${track.title}"... 🎧`);
     try {
-      // 1. If already saved offline in IndexedDB, download the file directly to phone/device!
+      // 1. If already saved offline in IndexedDB with full song, download directly to device!
       const existingBlob = await getOfflineAudioBlob(track.id);
-      if (existingBlob && existingBlob.size > 500000) {
+      if (existingBlob && existingBlob.size >= 1000000) {
         const safeArtist = (track.artist || 'Artista').replace(/[/\\?%*:|"<>]/g, '_');
         const safeTitle = (track.title || 'Cancion').replace(/[/\\?%*:|"<>]/g, '_');
         triggerFileDownload(existingBlob, `${safeArtist} - ${safeTitle}.mp3`);
-        showToast(`¡Descargando archivo guardado de "${track.title}" a tu celular! 🎧`);
+        showToast(`¡Descargando archivo completo de "${track.title}" a tu dispositivo! 🎧`);
         return;
       }
 
-      // 2. Try download helper
+      // 2. Try download helper (MusicGrabber 320kbps local server or storage)
       const ok = await downloadTrackAudio(track);
       if (ok) {
         const newIds = await getAllOfflineTrackIds();
         setOfflineTrackIds(newIds);
-        showToast(`¡"${track.title}" descargada a tu celular y lista para offline! 🎧`);
+        showToast(`¡"${track.title}" descargada completa y lista para offline! 🎧`);
         return;
       }
-    } catch (e) {
-      console.warn('Direct download attempt finished', e);
-    }
 
-    // 3. For mobile Chrome / PWA users: Open the dedicated mobile download sheet/modal
-    setDownloadModalTrack(track);
+      // 3. 1-click fallback: resolve full audio and trigger browser download directly without opening any menus
+      const q = `${track.artist} - ${track.title}`;
+      const res = await fetch(`/api/full-audio/search?q=${encodeURIComponent(q)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.videoId) {
+          const directUrl = `https://yout.com/video/${data.videoId}?format=mp3`;
+          const a = document.createElement('a');
+          a.href = directUrl;
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          showToast(`¡Descarga directa de "${track.title}" iniciada!`);
+          return;
+        }
+      }
+      showToast(`No se pudo iniciar la descarga directa de "${track.title}".`);
+    } catch (e) {
+      console.warn('Direct download attempt error:', e);
+      showToast(`Error al descargar "${track.title}".`);
+    }
   };
 
   // Save custom playlists
@@ -1439,7 +1465,7 @@ export default function App() {
                 onBatchMarkFavorite={handleBatchMarkFavorite}
                 availablePlaylists={availablePlaylistNames}
                 searchQuery={searchQuery}
-                onOpenDownloadModal={(track) => setDownloadModalTrack(track)}
+                onOpenDownloadModal={handleDirectDownloadTrack}
                 onOpenSearchModal={(query) => {
                   setSearchModalInitialQuery(query || '');
                   setIsDiscoveryModalOpen(true);
@@ -1530,7 +1556,7 @@ export default function App() {
                 onBatchMarkFavorite={handleBatchMarkFavorite}
                 availablePlaylists={availablePlaylistNames}
                 searchQuery={searchQuery}
-                onOpenDownloadModal={(track) => setDownloadModalTrack(track)}
+                onOpenDownloadModal={handleDirectDownloadTrack}
                 onOpenSearchModal={(query) => {
                   setSearchModalInitialQuery(query || '');
                   setIsDiscoveryModalOpen(true);
@@ -1608,7 +1634,7 @@ export default function App() {
             onBatchMarkFavorite={handleBatchMarkFavorite}
             availablePlaylists={availablePlaylistNames}
             searchQuery={searchQuery}
-            onOpenDownloadModal={(track) => setDownloadModalTrack(track)}
+            onOpenDownloadModal={handleDirectDownloadTrack}
             onOpenSearchModal={(query) => {
               setSearchModalInitialQuery(query || '');
               setIsDiscoveryModalOpen(true);
@@ -1832,7 +1858,7 @@ export default function App() {
         availablePlaylists={availablePlaylistNames}
         onCreatePlaylist={handleCreatePlaylist}
         onPlayTrackDirect={(track) => playTrackDirect(track)}
-        onOpenDownloadModal={(track) => setDownloadModalTrack(track)}
+        onOpenDownloadModal={handleDirectDownloadTrack}
       />
 
       {/* Hidden File Input for Importing Local Audio (.mp3, .m4a, .wav) */}
@@ -1864,7 +1890,7 @@ export default function App() {
         onBatchAddTracks={handleBatchAddTracks}
         availablePlaylists={availablePlaylistNames}
         onCreatePlaylist={handleCreatePlaylist}
-        onOpenDownloadModal={(track) => setDownloadModalTrack(track)}
+        onOpenDownloadModal={handleDirectDownloadTrack}
         initialQuery={searchModalInitialQuery}
         onOpenVercelGuide={() => setIsVercelModalOpen(true)}
       />

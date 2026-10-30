@@ -91,6 +91,26 @@ export async function downloadTrackAudio(track: Track): Promise<boolean> {
       return true;
     }
 
+    // 4. Fallback 1-click download: resolve full audio and trigger browser download directly (zero popup menus)
+    try {
+      const q = `${track.artist} - ${track.title}`;
+      const res = await fetch(`/api/full-audio/search?q=${encodeURIComponent(q)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.videoId) {
+          const directUrl = `https://yout.com/video/${data.videoId}?format=mp3`;
+          const a = document.createElement('a');
+          a.href = directUrl;
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          return true;
+        }
+      }
+    } catch {}
+
     return false;
   } catch (err) {
     console.error('Failed to download single track audio', err);
