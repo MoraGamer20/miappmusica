@@ -10,10 +10,6 @@
       "destination": "/api/full-audio/search"
     },
     {
-      "source": "/api/full-audio/download",
-      "destination": "/api/full-audio/download"
-    },
-    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

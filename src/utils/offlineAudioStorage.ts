@@ -74,30 +74,20 @@ export async function saveOfflineAudio(track: Track, audioBlob: Blob): Promise<v
 }
 
 /**
- * Retrieves the stored audio blob for a track.
- * Enforces that only authentic full songs (>= 1MB) or local audio files are returned.
- * Automatically deletes corrupted or 30-second preview clips on the fly.
+ * Retrieves the stored audio blob for a track
  */
 export async function getOfflineAudioBlob(trackId: string): Promise<Blob | null> {
   try {
     const db = await getDB();
     return await new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const tx = db.transaction(STORE_NAME, 'readonly');
       const store = tx.objectStore(STORE_NAME);
       const req = store.get(trackId);
 
       req.onsuccess = () => {
         const record = req.result as OfflineTrackRecord | undefined;
         if (record && record.audioBlob) {
-          const isLocal = record.track?.type === 'Local' || record.id.startsWith('local-');
-          const minSize = isLocal ? 400000 : 1000000;
-          if (record.audioBlob.size >= minSize) {
-            resolve(record.audioBlob);
-          } else {
-            // Automatically purge stale 30s preview snippet
-            store.delete(trackId);
-            resolve(null);
-          }
+          resolve(record.audioBlob);
         } else {
           resolve(null);
         }
@@ -126,20 +116,29 @@ export async function getOfflineAudioUrl(trackId: string): Promise<string | null
 }
 
 /**
- * Checks if a track is cached offline in IndexedDB with full-length audio
+ * Checks if a track is cached offline in IndexedDB
  */
 export async function isTrackOffline(trackId: string): Promise<boolean> {
   try {
-    const blob = await getOfflineAudioBlob(trackId);
-    return blob !== null;
+    const db = await getDB();
+    return await new Promise((resolve) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.getKey(trackId);
+
+      req.onsuccess = () => {
+        resolve(req.result !== undefined);
+      };
+
+      req.onerror = () => resolve(false);
+    });
   } catch {
     return false;
   }
 }
 
 /**
- * Gets all track IDs that have legitimate full-song offline audio stored.
- * Filters out any 30s preview clips (< 1MB).
+ * Gets all track IDs that have offline audio stored
  */
 export async function getAllOfflineTrackIds(): Promise<Set<string>> {
   try {
@@ -147,71 +146,17 @@ export async function getAllOfflineTrackIds(): Promise<Set<string>> {
     return await new Promise((resolve) => {
       const tx = db.transaction(STORE_NAME, 'readonly');
       const store = tx.objectStore(STORE_NAME);
-      const req = store.openCursor();
-      const validIds = new Set<string>();
+      const req = store.getAllKeys();
 
-      req.onsuccess = (event) => {
-        const cursor = (event.target as IDBRequest).result as IDBCursorWithValue | null;
-        if (cursor) {
-          const record = cursor.value as OfflineTrackRecord;
-          const isLocal = record.track?.type === 'Local' || record.id?.startsWith('local-');
-          const minSize = isLocal ? 400000 : 1000000;
-          const size = record.audioBlob?.size || record.fileSize || 0;
-          if (size >= minSize) {
-            validIds.add(record.id);
-          }
-          cursor.continue();
-        } else {
-          resolve(validIds);
-        }
+      req.onsuccess = () => {
+        const keys = req.result as string[];
+        resolve(new Set(keys));
       };
 
       req.onerror = () => resolve(new Set());
     });
   } catch {
     return new Set();
-  }
-}
-
-/**
- * Thoroughly scans IndexedDB and purges all 30-second clips or files < 1MB.
- * Leaves only authentic full songs or user-uploaded tracks.
- */
-export async function purgeShortAudioCache(): Promise<{ purgedCount: number; remainingCount: number }> {
-  try {
-    const db = await getDB();
-    return await new Promise((resolve) => {
-      const tx = db.transaction(STORE_NAME, 'readwrite');
-      const store = tx.objectStore(STORE_NAME);
-      const req = store.openCursor();
-      let purgedCount = 0;
-      let remainingCount = 0;
-
-      req.onsuccess = (event) => {
-        const cursor = (event.target as IDBRequest).result as IDBCursorWithValue | null;
-        if (cursor) {
-          const record = cursor.value as OfflineTrackRecord;
-          const isLocal = record.track?.type === 'Local' || record.id?.startsWith('local-');
-          const minSize = isLocal ? 400000 : 1000000;
-          const size = record.audioBlob?.size || record.fileSize || 0;
-
-          if (!record.audioBlob || size < minSize) {
-            cursor.delete();
-            purgedCount++;
-          } else {
-            remainingCount++;
-          }
-          cursor.continue();
-        } else {
-          resolve({ purgedCount, remainingCount });
-        }
-      };
-
-      req.onerror = () => resolve({ purgedCount: 0, remainingCount: 0 });
-    });
-  } catch (err) {
-    console.error('Failed to purge short audio cache', err);
-    return { purgedCount: 0, remainingCount: 0 };
   }
 }
 
@@ -373,7 +318,7 @@ export async function fetchFullTrackAudioBlob(track: Track): Promise<Blob | null
     return cached;
   }
 
-  // 1. Try fetching full 320 kbps audio from user's running MusicGrabber server (if active)
+  // Try fetching full 320 kbps audio from user's running MusicGrabber server
   try {
     const fullBlob = await fetchFullSongFromMusicGrabber(track);
     if (fullBlob && fullBlob.size > 1000000) {
@@ -382,41 +327,44 @@ export async function fetchFullTrackAudioBlob(track: Track): Promise<Blob | null
     }
   } catch {}
 
-  // 2. Fetch directly from cloud / serverless full audio resolver & downloader (/api/full-audio/download)
-  try {
-    const q = `${track.artist} - ${track.title}`;
-    const searchRes = await fetch(`/api/full-audio/search?q=${encodeURIComponent(q)}`);
-    if (searchRes.ok) {
-      const searchData = await searchRes.json();
-      if (searchData.videoId) {
-        const downloadUrl = `/api/full-audio/download?videoId=${searchData.videoId}&title=${encodeURIComponent(track.title)}&artist=${encodeURIComponent(track.artist)}`;
-        const dlRes = await fetch(downloadUrl);
-        if (dlRes.ok) {
-          const blob = await dlRes.blob();
-          if (blob && blob.size > 500000) {
-            await saveOfflineAudio(track, blob);
-            return blob;
-          }
-        }
-      }
-    }
-  } catch (err) {
-    console.warn('Error fetching cloud full audio for offline:', err);
-  }
-
   return null;
 }
 
 /**
- * Legacy wrapper: calls fetchFullTrackAudioBlob strictly for full songs.
- * Never provides 30s preview clips for offline storage.
+ * Legacy wrapper: calls fetchFullTrackAudioBlob first, and only allows preview if explicitly allowed
  */
 export async function fetchOrGenerateTrackAudioBlob(
   track: Track,
-  _allowPreview = false
+  allowPreview = false
 ): Promise<Blob | null> {
   const full = await fetchFullTrackAudioBlob(track);
-  if (full && full.size >= 1000000) return full;
+  if (full) return full;
+
+  if (!allowPreview) {
+    return null;
+  }
+
+  // Only if preview explicitly allowed (for in-app 30s preview cache only)
+  let previewUrl = track.previewUrl;
+  if (!previewUrl) {
+    try {
+      const details = await getTrackDetails(track);
+      if (details.previewUrl) previewUrl = details.previewUrl;
+    } catch {}
+  }
+
+  if (previewUrl) {
+    try {
+      const res = await fetch(previewUrl);
+      if (res.ok) {
+        const blob = await res.blob();
+        if (blob && blob.size > 1000) {
+          return blob;
+        }
+      }
+    } catch {}
+  }
+
   return null;
 }
 
@@ -450,7 +398,6 @@ export async function clearAllOfflineAudio(): Promise<void> {
 /**
  * Downloads and caches all tracks of a playlist into IndexedDB for 100% offline playback.
  * Operates in background with progress and persists actual audio blobs.
- * NEVER stores 30-second previews. Only complete songs (>= 1MB).
  */
 export async function downloadAndSavePlaylistOffline(
   tracks: Track[],
@@ -477,10 +424,13 @@ export async function downloadAndSavePlaylistOffline(
 
       try {
         let blob = await getOfflineAudioBlob(t.id);
-        if (!blob || blob.size < 1000000) {
-          blob = await fetchFullTrackAudioBlob(t);
+        if (!blob || blob.size < 600000) {
+          blob = await fetchOrGenerateTrackAudioBlob(t);
+          if (blob) {
+            await saveOfflineAudio(t, blob);
+          }
         }
-        if (blob && blob.size >= 1000000) {
+        if (blob) {
           savedIds.push(t.id);
           onTrackSaved?.(t.id);
         }
