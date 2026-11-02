@@ -136,17 +136,27 @@ export const FullTrackDownloadModal: React.FC<FullTrackDownloadModalProps> = ({
         }
       }
 
-      // 2. Mobile PWA User: Use the resolved full-track video ID to open the mobile MP3 downloader
+      // 2. Mobile PWA User: Download complete audio directly via serverless /api/full-audio/download
       const currentDetails = trackDetails || (await getFullTrackDetails(track));
-      if (currentDetails.directDownloadUrl) {
-        setStatusMessage('¡Abriendo descargador móvil de MP3! Guarda el archivo en tu celular 📱');
-        // Open the mobile download tab directly
-        window.open(currentDetails.directDownloadUrl, '_blank', 'noopener,noreferrer');
-      } else {
-        // Fallback to youtube search
-        const query = encodeURIComponent(`${track.artist} ${track.title}`);
-        window.open(`https://yout.com/`, '_blank', 'noopener,noreferrer');
+      if (currentDetails.videoId) {
+        setStatusMessage('Descargando pista completa a tu celular...');
+        const dlUrl = `/api/full-audio/download?videoId=${currentDetails.videoId}&title=${encodeURIComponent(track.title)}&artist=${encodeURIComponent(track.artist)}`;
+        const res = await fetch(dlUrl);
+        if (res.ok) {
+          const blob = await res.blob();
+          if (blob && blob.size > 500000) {
+            await saveOfflineAudio(track, blob);
+            setIsSavedOffline(true);
+            onTrackSavedOffline?.(track.id);
+            const safeArtist = (track.artist || 'Artista').replace(/[/\\?%*:|"<>]/g, '_');
+            const safeTitle = (track.title || 'Cancion').replace(/[/\\?%*:|"<>]/g, '_');
+            triggerFileDownload(blob, `${safeArtist} - ${safeTitle}.mp3`);
+            setStatusMessage('¡Canción completa descargada a tu celular y disponible sin conexión! 🎧');
+            return;
+          }
+        }
       }
+      setStatusMessage('Error al obtener la canción completa');
     } catch (e: any) {
       setStatusMessage(e?.message || 'Error al procesar la descarga');
     } finally {

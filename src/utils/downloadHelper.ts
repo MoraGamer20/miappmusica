@@ -91,22 +91,25 @@ export async function downloadTrackAudio(track: Track): Promise<boolean> {
       return true;
     }
 
-    // 4. Fallback 1-click download: resolve full audio and trigger browser download directly (zero popup menus)
+    // 4. Cloud 1-click download via /api/full-audio/download
     try {
       const q = `${track.artist} - ${track.title}`;
       const res = await fetch(`/api/full-audio/search?q=${encodeURIComponent(q)}`);
       if (res.ok) {
         const data = await res.json();
         if (data.videoId) {
-          const directUrl = `https://yout.com/video/${data.videoId}?format=mp3`;
-          const a = document.createElement('a');
-          a.href = directUrl;
-          a.target = '_blank';
-          a.rel = 'noopener noreferrer';
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          return true;
+          const downloadUrl = `/api/full-audio/download?videoId=${data.videoId}&title=${encodeURIComponent(track.title)}&artist=${encodeURIComponent(track.artist)}`;
+          const resDl = await fetch(downloadUrl);
+          if (resDl.ok) {
+            const blob = await resDl.blob();
+            if (blob && blob.size > 500000) {
+              await saveOfflineAudio(track, blob);
+              const safeArtist = (track.artist || 'Artista').replace(/[/\\?%*:|"<>]/g, '_');
+              const safeTitle = (track.title || 'Cancion').replace(/[/\\?%*:|"<>]/g, '_');
+              triggerFileDownload(blob, `${safeArtist} - ${safeTitle}.mp3`);
+              return true;
+            }
+          }
         }
       }
     } catch {}

@@ -373,7 +373,7 @@ export async function fetchFullTrackAudioBlob(track: Track): Promise<Blob | null
     return cached;
   }
 
-  // Try fetching full 320 kbps audio from user's running MusicGrabber server
+  // 1. Try fetching full 320 kbps audio from user's running MusicGrabber server (if active)
   try {
     const fullBlob = await fetchFullSongFromMusicGrabber(track);
     if (fullBlob && fullBlob.size > 1000000) {
@@ -381,6 +381,28 @@ export async function fetchFullTrackAudioBlob(track: Track): Promise<Blob | null
       return fullBlob;
     }
   } catch {}
+
+  // 2. Fetch directly from cloud / serverless full audio resolver & downloader (/api/full-audio/download)
+  try {
+    const q = `${track.artist} - ${track.title}`;
+    const searchRes = await fetch(`/api/full-audio/search?q=${encodeURIComponent(q)}`);
+    if (searchRes.ok) {
+      const searchData = await searchRes.json();
+      if (searchData.videoId) {
+        const downloadUrl = `/api/full-audio/download?videoId=${searchData.videoId}&title=${encodeURIComponent(track.title)}&artist=${encodeURIComponent(track.artist)}`;
+        const dlRes = await fetch(downloadUrl);
+        if (dlRes.ok) {
+          const blob = await dlRes.blob();
+          if (blob && blob.size > 500000) {
+            await saveOfflineAudio(track, blob);
+            return blob;
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Error fetching cloud full audio for offline:', err);
+  }
 
   return null;
 }
