@@ -1,3 +1,4 @@
+import { Ytdl } from '@distube/ytdl-core';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
@@ -8,6 +9,51 @@ function fullAudioSearchPlugin() {
   return {
     name: 'full-audio-search-plugin',
     configureServer(server: any) {
+      server.middlewares.use('/api/full-audio/download', async (req: any, res: any) => {
+        try {
+          const url = new URL(req.url, 'http://localhost:3000');
+          const videoId = url.searchParams.get('videoId');
+          const title = url.searchParams.get('title') || 'Cancion';
+          const artist = url.searchParams.get('artist') || 'Artista';
+
+          if (!videoId) {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ error: 'Missing videoId' }));
+            return;
+          }
+
+          const cleanArtist = artist.replace(/[/\\?%*:|"<>]/g, '_');
+          const cleanTitle = title.replace(/[/\\?%*:|"<>]/g, '_');
+          const filename = `${cleanArtist} - ${cleanTitle}.mp3`;
+
+          const client = new Ytdl();
+          const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+          const audioStream = client.download(videoUrl, {
+            filter: (f: any) => f.container === 'mp4' && f.hasAudio && !f.hasVideo,
+            quality: 'highestaudio',
+          });
+
+          res.setHeader('Content-Type', 'audio/mpeg');
+          res.setHeader(
+            'Content-Disposition',
+            `attachment; filename="${encodeURIComponent(filename)}"; filename*=UTF-8''${encodeURIComponent(filename)}`
+          );
+
+          audioStream.on('error', (err: any) => {
+            console.error('Vite stream error:', err);
+            if (!res.headersSent) {
+              res.statusCode = 500;
+              res.end(JSON.stringify({ error: 'Error al transmitir audio' }));
+            }
+          });
+
+          audioStream.pipe(res);
+        } catch (e: any) {
+          res.statusCode = 500;
+          res.end(JSON.stringify({ error: String(e?.message || e) }));
+        }
+      });
+
       server.middlewares.use('/api/full-audio/search', async (req: any, res: any) => {
         try {
           const url = new URL(req.url, 'http://localhost:3000');
