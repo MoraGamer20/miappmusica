@@ -119,8 +119,7 @@ export default defineConfig(() => {
           ],
         },
         devOptions: {
-          enabled: true,
-          type: 'module',
+          enabled: false,
         },
       }),
     ],
@@ -143,6 +142,11 @@ export default defineConfig(() => {
           target: 'https://api.deezer.com',
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api\/deezer/, ''),
+        },
+        '/api/grabber': {
+          target: 'http://127.0.0.1:5000',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/grabber/, '/api'),
         },
       },
     },

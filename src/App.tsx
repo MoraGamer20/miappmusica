@@ -666,7 +666,7 @@ export default function App() {
     }
 
     if (isPlaying) {
-      if (playbackSource === 'preview' && audioRef.current) {
+      if (audioRef.current) {
         audioRef.current.pause();
       }
       if (synthStopRef.current) {
@@ -675,10 +675,10 @@ export default function App() {
       }
       setIsPlaying(false);
     } else {
-      if (playbackSource === 'full' && activeVideoId) {
-        setIsPlaying(true);
-      } else if (audioRef.current && audioRef.current.src) {
+      if (audioRef.current && audioRef.current.src) {
         audioRef.current.play().catch(() => {});
+        setIsPlaying(true);
+      } else if (playbackSource === 'full' && activeVideoId) {
         setIsPlaying(true);
       } else {
         playTrackDirect(currentTrack);

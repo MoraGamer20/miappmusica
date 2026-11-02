@@ -138,7 +138,8 @@ export async function checkMusicGrabberConnection(
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 2500);
 
-      const res = await fetch(`${host}/api/health`, {
+      const healthEndpoint = host.endsWith('/api') || host.endsWith('/api/grabber') ? `${host}/health` : `${host}/api/health`;
+      const res = await fetch(healthEndpoint, {
         method: 'GET',
         headers: { Accept: 'application/json' },
         signal: controller.signal,
@@ -196,7 +197,8 @@ export async function searchSongOnMusicGrabber(
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
 
-    const res = await fetch(`${host}/api/search`, {
+    const searchEndpoint = host.endsWith('/api') || host.endsWith('/api/grabber') ? `${host}/search` : `${host}/api/search`;
+    const res = await fetch(searchEndpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query }),
@@ -218,7 +220,7 @@ export async function searchSongOnMusicGrabber(
       thumbnail: data.thumbnail || '',
       is_full_song: data.is_full_song !== false,
       quality: data.quality || '320 kbps (Máxima)',
-      downloadUrl: `${host}/api/download/${data.id}`,
+      downloadUrl: host.endsWith('/api') || host.endsWith('/api/grabber') ? `${host}/download/${data.id}` : `${host}/api/download/${data.id}`,
       host,
     };
   } catch (err) {
@@ -250,19 +252,33 @@ export async function triggerMusicGrabberDirectDownload(
     };
   }
 
-  // Trigger native browser download directly to device
-  const safeArtist = (track.artist || 'Artista').replace(/[/\\?%*:|"<>]/g, '_');
-  const safeTitle = (track.title || 'Cancion').replace(/[/\\?%*:|"<>]/g, '_');
-  const downloadLink = document.createElement('a');
-  downloadLink.href = searchResult.downloadUrl;
-  downloadLink.download = `${safeArtist} - ${safeTitle}.mp3`;
-  downloadLink.target = '_blank';
-  downloadLink.rel = 'noopener noreferrer';
-  document.body.appendChild(downloadLink);
-  downloadLink.click();
-  document.body.removeChild(downloadLink);
+  // Fetch the MP3 blob directly to avoid navigating or opening error tabs in browser
+  try {
+    const res = await fetch(searchResult.downloadUrl);
+    if (!res.ok) {
+      const errText = await res.text();
+      return { success: false, error: errText };
+    }
+    const blob = await res.blob();
+    if (blob.size < 1000000) {
+      return { success: false, error: 'Archivo descargado incompleto' };
+    }
 
-  return { success: true, song: searchResult };
+    const safeArtist = (track.artist || 'Artista').replace(/[/\\?%*:|"<>]/g, '_');
+    const safeTitle = (track.title || 'Cancion').replace(/[/\\?%*:|"<>]/g, '_');
+    const url = URL.createObjectURL(blob);
+    const downloadLink = document.createElement('a');
+    downloadLink.href = url;
+    downloadLink.download = `${safeArtist} - ${safeTitle}.mp3`;
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+
+    return { success: true, song: searchResult };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Error al descargar' };
+  }
 }
 
 /**
