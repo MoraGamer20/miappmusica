@@ -21,3 +21,4 @@ echo [*] Tu celular conectado a Wi-Fi o Datos puede descargar ahora directamente
 echo.
 python server_grabber.py
 pause
+
