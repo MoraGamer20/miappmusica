@@ -3,7 +3,8 @@ import { Track } from '../types/music';
 const STORAGE_KEY = 'deezer_musicgrabber_host';
 export const LOCALHOST_MUSICGRABBER_HOST = 'http://localhost:5000';
 export const LAN_MUSICGRABBER_HOST = 'http://192.168.1.45:5000';
-export const DEFAULT_MUSICGRABBER_HOST = LAN_MUSICGRABBER_HOST;
+export const CLOUD_MUSICGRABBER_HOST = 'https://deezermusicgrabber.loca.lt';
+export const DEFAULT_MUSICGRABBER_HOST = CLOUD_MUSICGRABBER_HOST;
 
 let resolvedActiveHost: string | null = null;
 let lastCheckTime = 0;
@@ -22,7 +23,7 @@ export interface MusicGrabberSongResult {
 }
 
 /**
- * Gets candidate server hosts to check (Localhost PC, LAN Mobile IP, saved custom host).
+ * Gets candidate server hosts to check (Cloud Tunnel, LAN Mobile IP, Localhost PC, saved custom host).
  */
 export function getCandidateHosts(): string[] {
   const candidates: string[] = [];
@@ -35,13 +36,16 @@ export function getCandidateHosts(): string[] {
     }
   } catch {}
 
-  // 2. LAN IP provided by user's PC (for mobile/tablet access)
+  // 2. Cloud tunnel (accessible anywhere on vivo Y53s / Chrome PWA)
+  candidates.push(CLOUD_MUSICGRABBER_HOST);
+
+  // 3. LAN IP provided by user's PC (for mobile/tablet access)
   candidates.push(LAN_MUSICGRABBER_HOST);
 
-  // 3. Localhost (for desktop browser access)
+  // 4. Localhost (for desktop browser access)
   candidates.push(LOCALHOST_MUSICGRABBER_HOST);
 
-  // 4. Current hostname if accessed via IP in local network
+  // 5. Current hostname if accessed via IP in local network
   if (typeof window !== 'undefined' && window.location.hostname && window.location.hostname !== 'localhost') {
     candidates.push(`http://${window.location.hostname}:5000`);
   }
@@ -67,7 +71,7 @@ export function getMusicGrabberHost(): string {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) return saved;
   } catch {}
-  return LAN_MUSICGRABBER_HOST; // Default to LAN for seamless mobile testing
+  return CLOUD_MUSICGRABBER_HOST;
 }
 
 /**
@@ -136,12 +140,12 @@ export async function checkMusicGrabberConnection(
   for (const host of candidates) {
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 2500);
+      const timeout = setTimeout(() => controller.abort(), 3500);
 
       const healthEndpoint = host.endsWith('/api') || host.endsWith('/api/grabber') ? `${host}/health` : `${host}/api/health`;
       const res = await fetch(healthEndpoint, {
         method: 'GET',
-        headers: { Accept: 'application/json' },
+        headers: { Accept: 'application/json', 'bypass-tunnel-reminder': '1' },
         signal: controller.signal,
       });
       clearTimeout(timeout);
@@ -195,12 +199,12 @@ export async function searchSongOnMusicGrabber(
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
+    const timeout = setTimeout(() => controller.abort(), 20000);
 
     const searchEndpoint = host.endsWith('/api') || host.endsWith('/api/grabber') ? `${host}/search` : `${host}/api/search`;
     const res = await fetch(searchEndpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'bypass-tunnel-reminder': '1' },
       body: JSON.stringify({ query }),
       signal: controller.signal,
     });
@@ -254,7 +258,9 @@ export async function triggerMusicGrabberDirectDownload(
 
   // Fetch the MP3 blob directly to avoid navigating or opening error tabs in browser
   try {
-    const res = await fetch(searchResult.downloadUrl);
+    const res = await fetch(searchResult.downloadUrl, {
+      headers: { 'bypass-tunnel-reminder': '1' },
+    });
     if (!res.ok) {
       const errText = await res.text();
       return { success: false, error: errText };
@@ -301,6 +307,7 @@ export async function fetchFullSongFromMusicGrabber(
 
     const downloadRes = await fetch(searchData.downloadUrl, {
       method: 'GET',
+      headers: { 'bypass-tunnel-reminder': '1' },
       signal: downloadController.signal,
     });
     clearTimeout(downloadTimeout);

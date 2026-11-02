@@ -429,33 +429,34 @@ export default function App() {
     }
   };
 
-  // Direct MP3 download handler: mobile-first, zero PC/.bat dependencies
+  // Direct 1-click MP3 download handler: 100% direct, zero popups or redirect modals
   const handleDirectDownloadTrack = async (track: Track) => {
+    showToast(`Iniciando descarga de "${track.title}"... ⏳`);
     try {
-      // 1. If already saved offline in IndexedDB, download the file directly to phone/device!
+      // 1. If already saved offline in IndexedDB, trigger instant file download!
       const existingBlob = await getOfflineAudioBlob(track.id);
       if (existingBlob && existingBlob.size > 500000) {
         const safeArtist = (track.artist || 'Artista').replace(/[/\\?%*:|"<>]/g, '_');
         const safeTitle = (track.title || 'Cancion').replace(/[/\\?%*:|"<>]/g, '_');
         triggerFileDownload(existingBlob, `${safeArtist} - ${safeTitle}.mp3`);
-        showToast(`¡Descargando archivo guardado de "${track.title}" a tu celular! 🎧`);
+        showToast(`¡"${track.title}" descargada a tu celular! 🎧`);
         return;
       }
 
-      // 2. Try download helper
+      // 2. Direct download from MusicGrabber bridge / storage helper
       const ok = await downloadTrackAudio(track);
       if (ok) {
         const newIds = await getAllOfflineTrackIds();
         setOfflineTrackIds(newIds);
-        showToast(`¡"${track.title}" descargada a tu celular y lista para offline! 🎧`);
+        showToast(`¡"${track.title}" descargada con éxito! 🎧`);
         return;
+      } else {
+        showToast(`No se pudo descargar "${track.title}". Asegúrate de que el servidor esté activo.`);
       }
     } catch (e) {
-      console.warn('Direct download attempt finished', e);
+      console.warn('Direct download error:', e);
+      showToast(`Error al procesar la descarga de "${track.title}"`);
     }
-
-    // 3. For mobile Chrome / PWA users: Open the dedicated mobile download sheet/modal
-    setDownloadModalTrack(track);
   };
 
   // Save custom playlists
